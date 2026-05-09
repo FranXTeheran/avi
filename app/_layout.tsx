@@ -16,9 +16,17 @@ function RootNavigator() {
   useEffect(() => {
     if (Platform.OS !== "android") return;
 
-    NavigationBar.setBackgroundColorAsync(colors.background).catch(() => {});
-    NavigationBar.setButtonStyleAsync(isDark ? "light" : "dark").catch(() => {});
-    NavigationBar.setVisibilityAsync("visible").catch(() => {});
+    async function configureSystemBars() {
+      try {
+        await NavigationBar.setBackgroundColorAsync(colors.background);
+        await NavigationBar.setButtonStyleAsync(isDark ? "light" : "dark");
+        await NavigationBar.setVisibilityAsync("visible");
+      } catch (error) {
+        console.log("Error configurando barras del sistema:", error);
+      }
+    }
+
+    configureSystemBars();
   }, [colors.background, isDark]);
 
   const screenOptions = useMemo(
@@ -35,8 +43,8 @@ function RootNavigator() {
     <>
       <StatusBar
         style={isDark ? "light" : "dark"}
-        translucent={false}
         backgroundColor={colors.background}
+        translucent={false}
       />
 
       <Stack screenOptions={screenOptions} />
