@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -29,24 +29,51 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function handleRegister() {
+  const handleTogglePassword = useCallback(() => {
+    setShowPassword((current) => !current);
+  }, []);
+
+  const handleGoToLogin = useCallback(() => {
+    router.push("/login");
+  }, []);
+
+  const handleRegister = useCallback(async () => {
+    if (loading) return;
+
+    const normalizedName = name.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+
+    if (!normalizedName || !normalizedEmail || !normalizedPassword) {
+      Alert.alert("Falta información", "Completa todos los campos.");
+      return;
+    }
+
+    if (normalizedPassword.length < 8) {
+      Alert.alert("Contraseña muy corta", "Usa mínimo 8 caracteres.");
+      return;
+    }
+
     try {
       setLoading(true);
-      await signUp(email.trim(), password, name.trim());
+
+      await signUp(normalizedEmail, normalizedPassword, normalizedName);
+
       router.replace("/(onboarding)/welcome");
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Alert.alert(
+        "Error",
+        error?.message ?? "No pudimos crear tu cuenta. Intenta nuevamente."
+      );
     } finally {
       setLoading(false);
     }
-  }
+  }, [name, email, password, loading]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <SafeAreaView style={styles.safeArea} edges={["left", "right", "bottom"]}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={styles.screen}>
-          <View style={styles.topBar} />
-
           <View style={styles.container}>
             <View style={styles.header}>
               <Text style={styles.title}>Crear cuenta</Text>
@@ -63,6 +90,12 @@ export default function RegisterScreen() {
                 placeholder="Ingresa tu nombre"
                 placeholderTextColor="#B8B8B8"
                 style={styles.input}
+                autoCapitalize="words"
+                autoCorrect={false}
+                textContentType="name"
+                autoComplete="name"
+                returnKeyType="next"
+                editable={!loading}
               />
 
               <Text style={styles.label}>Correo electrónico</Text>
@@ -75,6 +108,10 @@ export default function RegisterScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="email-address"
+                textContentType="emailAddress"
+                autoComplete="email"
+                returnKeyType="next"
+                editable={!loading}
               />
 
               <Text style={styles.label}>Contraseña</Text>
@@ -86,9 +123,20 @@ export default function RegisterScreen() {
                   placeholderTextColor="#B8B8B8"
                   style={styles.passwordInput}
                   secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType="newPassword"
+                  autoComplete="new-password"
+                  returnKeyType="done"
+                  onSubmitEditing={handleRegister}
+                  editable={!loading}
                 />
 
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <TouchableOpacity
+                  onPress={handleTogglePassword}
+                  activeOpacity={0.7}
+                  disabled={loading}
+                >
                   <Feather
                     name={showPassword ? "eye" : "eye-off"}
                     size={16}
@@ -118,7 +166,7 @@ export default function RegisterScreen() {
             <View style={styles.footer}>
               <Text style={styles.footerText}>¿Ya tienes cuenta?</Text>
 
-              <TouchableOpacity onPress={() => router.push("/login")}>
+              <TouchableOpacity onPress={handleGoToLogin} disabled={loading}>
                 <Text style={styles.footerLink}> Inicia sesión</Text>
               </TouchableOpacity>
             </View>
@@ -132,17 +180,12 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: YELLOW,
+    backgroundColor: "#FFFFFF",
   },
 
   screen: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-  },
-
-  topBar: {
-    height: 8,
-    backgroundColor: YELLOW,
   },
 
   container: {

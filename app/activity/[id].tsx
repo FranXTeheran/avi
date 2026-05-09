@@ -67,25 +67,35 @@ export default function ActivityDetailScreen() {
     }
   }
 
-  async function handleComplete() {
-    try {
-      if (!activity?.id || completing) return;
+async function handleComplete() {
+  try {
+    if (!activity?.id || completing) return;
 
-      setCompleting(true);
+    // Optimistic update — actualiza UI inmediatamente
+    setActivity((prev) =>
+      prev ? { ...prev, status: "completed", } : prev
+    );
 
-      const updated = await completeActivity(activity.id);
+    setCompleting(true);
 
-      await cancelActivityNotifications(activity.id);
+    // Cancela notificaciones en segundo plano
+    cancelActivityNotifications(activity.id).catch((error) => {
+      console.warn("Error cancelling notifications:", error);
+    });
 
-      setActivity(updated);
+    // Persiste en Supabase
+    await completeActivity(activity.id);
 
-      Alert.alert("Listo", "Actividad marcada como completada.");
-    } catch (error: any) {
-      Alert.alert("Error", error.message);
-    } finally {
-      setCompleting(false);
-    }
+  } catch (error: any) {
+    // Revertir si falló
+    setActivity((prev) =>
+      prev ? { ...prev, status: "pending" } : prev
+    );
+    Alert.alert("Error", error.message);
+  } finally {
+    setCompleting(false);
   }
+}
 
   async function handleOpenPlatform() {
     const canOpen = await Linking.canOpenURL(SIMA_URL);

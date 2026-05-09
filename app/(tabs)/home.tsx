@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Text,
   StyleSheet,
@@ -10,7 +10,7 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useAppTheme } from "@/src/hooks/useAppTheme";
 
@@ -34,7 +34,41 @@ type GreetingContext = {
   subtitle: string;
   cardTitle: string;
   cardDescription: string;
+  image: "calm" | "attention" | "support" | "welcome";
 };
+
+// Fuera del componente — no se recrean en cada render
+const welcomeImages = {
+  welcome: require("../../assets/images/home-welcome.png"),
+  calm: require("../../assets/images/home-calm.png"),
+  attention: require("../../assets/images/home-attention.png"),
+  support: require("../../assets/images/home-support.png"),
+};
+
+function formatShortDate(date: string | null): string {
+  if (!date) return "Sin fecha";
+  return new Date(date).toLocaleDateString("es-CO", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+function daysUntil(date: string | null): number | null {
+  if (!date) return null;
+  const now = new Date();
+  const due = new Date(date);
+  const diff = due.getTime() - now.getTime();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+function priorityScore(activity: Activity): number {
+  if (activity.priority === "high") return 0;
+  if (activity.type === "evaluation") return 1;
+  if (activity.type === "final_project") return 2;
+  if (activity.type === "protocol") return 3;
+  return 4;
+}
 
 function getGreeting(
   userName: string,
@@ -74,7 +108,6 @@ function getGreeting(
   const timeGreeting =
     hour < 12 ? "Buenos días" : hour < 18 ? "Buenas tardes" : "Buenas noches";
 
-  // Caso: actividades vencidas
   if (overdue.length > 0) {
     return {
       title: `${timeGreeting}, ${userName}`,
@@ -83,12 +116,11 @@ function getGreeting(
           ? "Tienes una actividad vencida. Una cosa a la vez."
           : `Tienes ${overdue.length} actividades vencidas. Vamos paso a paso.`,
       cardTitle: "Vamos paso a paso ",
-      cardDescription:
-        "AVI te ayuda a organizarte. Empieza por la más cercana.",
+      cardDescription: "AVI te ayuda a organizarte. Empieza por la más cercana.",
+      image: "support",
     };
   }
 
-  // Caso: algo vence hoy
   if (dueToday.length > 0) {
     const first = dueToday[0];
     return {
@@ -102,10 +134,10 @@ function getGreeting(
         dueToday.length === 1
           ? `${first.title}. Todavía tienes tiempo.`
           : `${first.title} y ${dueToday.length - 1} más. Puedes organizarte con calma.`,
+      image: "attention",
     };
   }
 
-  // Caso: algo vence mañana
   if (dueTomorrow.length > 0) {
     const first = dueTomorrow[0];
     return {
@@ -113,26 +145,26 @@ function getGreeting(
       subtitle: "Mañana tienes entregas. Buen momento para adelantar.",
       cardTitle: "Mañana vence algo ",
       cardDescription: `${first.title}. Buen momento para dejarlo listo hoy.`,
+      image: "attention",
     };
   }
 
-  // Caso: hay pendientes pero nada urgente
   if (pending.length > 0) {
     return {
       title: `${timeGreeting}, ${userName}`,
       subtitle: "Tu semana se ve manejable. Sigue así.",
-      cardTitle: "Todo tranquilo por ahora  ",
-      cardDescription:
-        "No tienes entregas urgentes. Puedes organizarte con calma.",
+      cardTitle: "Todo tranquilo por ahora",
+      cardDescription: "No tienes entregas urgentes. Puedes organizarte con calma.",
+      image: "calm",
     };
   }
 
-  // Caso: todo completado o sin actividades
   return {
     title: `${timeGreeting}, ${userName}`,
     subtitle: "Todo al día. Buen trabajo.",
-    cardTitle: "¡Todo al día! ",
+    cardTitle: "¡Todo al día!",
     cardDescription: "No tienes pendientes por ahora. Disfruta el momento.",
+    image: activities.length === 0 ? "welcome" : "calm",
   };
 }
 
@@ -143,60 +175,42 @@ export default function HomeScreen() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("compañero");
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
-  useEffect(() => {
-    loadActivities();
-  }, []);
-
-  async function loadActivities() {
+  const loadActivities = useCallback(async () => {
     try {
       setLoading(true);
 
-      const [profile, data] = await Promise.all([
-        getProfile(),
-        getActivities(),
-      ]);
+      // Solo carga el perfil la primera vez
+      if (!profileLoaded) {
+        const [profile, data] = await Promise.all([
+          getProfile(),
+          getActivities({ forceRefresh: true }),
+        ]);
 
-      if (profile?.name) {
-        setUserName(profile.name.split(" ")[0]);
+        if (profile?.name) {
+          setUserName(profile.name.split(" ")[0]);
+        }
+
+        setProfileLoaded(true);
+        setActivities(data);
+      } else {
+        const data = await getActivities({ forceRefresh: true });
+        setActivities(data);
       }
-
-      setActivities(data);
     } catch (error) {
       console.log("Error cargando home:", error);
     } finally {
       setLoading(false);
     }
-  }
+  }, [profileLoaded]);
 
-  function formatShortDate(date: string | null) {
-    if (!date) return "Sin fecha";
-
-    return new Date(date).toLocaleDateString("es-CO", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-    });
-  }
-
-  function daysUntil(date: string | null) {
-    if (!date) return null;
-
-    const now = new Date();
-    const due = new Date(date);
-    const diff = due.getTime() - now.getTime();
-
-    return Math.ceil(diff / (1000 * 60 * 60 * 24));
-  }
-
-  function priorityScore(activity: Activity) {
-    if (activity.priority === "high") return 0;
-    if (activity.type === "evaluation") return 1;
-    if (activity.type === "final_project") return 2;
-    if (activity.type === "protocol") return 3;
-
-    return 4;
-  }
+  // Se refresca cada vez que el Home vuelve a estar en foco
+  useFocusEffect(
+    useCallback(() => {
+      loadActivities();
+    }, [loadActivities])
+  );
 
   const upcoming = useMemo(() => {
     const now = new Date();
@@ -205,7 +219,6 @@ export default function HomeScreen() {
       .filter((activity) => {
         if (activity.status === "completed") return false;
         if (!activity.due_at) return false;
-
         return new Date(activity.due_at) >= now;
       })
       .sort((a, b) => {
@@ -216,9 +229,7 @@ export default function HomeScreen() {
           return priorityA - priorityB;
         }
 
-        return (
-          new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime()
-        );
+        return new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime();
       });
   }, [activities]);
 
@@ -226,15 +237,13 @@ export default function HomeScreen() {
 
   const nextActivity = topThree[0];
 
-  const completed = useMemo(
-    () => activities.filter((a) => a.status === "completed"),
-    [activities]
-  );
-
   const completionPercent = useMemo(() => {
     if (activities.length === 0) return 0;
-    return Math.round((completed.length / activities.length) * 100);
-  }, [activities.length, completed.length]);
+    const completedCount = activities.filter(
+      (a) => a.status === "completed"
+    ).length;
+    return Math.round((completedCount / activities.length) * 100);
+  }, [activities]);
 
   const greeting = useMemo(
     () => getGreeting(userName, activities),
@@ -336,7 +345,7 @@ export default function HomeScreen() {
             </View>
 
             <Image
-              source={require("../../assets/images/home-welcome.png")}
+              source={welcomeImages[greeting.image]}
               style={styles.welcomeImage}
               resizeMode="contain"
             />
@@ -623,26 +632,18 @@ export default function HomeScreen() {
 
                     <View style={styles.deliveryInfo}>
                       <Text
-                        style={[
-                          styles.deliveryTitle,
-                          { color: colors.text },
-                        ]}
+                        style={[styles.deliveryTitle, { color: colors.text }]}
                         numberOfLines={1}
                       >
                         {activity.title}
                       </Text>
 
                       <Text
-                        style={[
-                          styles.deliveryMeta,
-                          { color: colors.muted },
-                        ]}
+                        style={[styles.deliveryMeta, { color: colors.muted }]}
                       >
                         {formatShortDate(activity.due_at)}
                         {days !== null &&
-                          ` · ${
-                            days === 0 ? "vence hoy" : `en ${days} días`
-                          }`}
+                          ` · ${days === 0 ? "vence hoy" : `en ${days} días`}`}
                       </Text>
                     </View>
 
@@ -755,7 +756,7 @@ const styles = StyleSheet.create({
   },
 
   greeting: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "900",
     letterSpacing: -1.5,
   },

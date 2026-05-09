@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -30,26 +30,49 @@ export default function LoginScreen() {
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin() {
+  const handleTogglePassword = useCallback(() => {
+    setShowPassword((current) => !current);
+  }, []);
+
+  const handleToggleRemember = useCallback(() => {
+    setRemember((current) => !current);
+  }, []);
+
+  const handleGoToRegister = useCallback(() => {
+    router.push("/(auth)/register");
+  }, []);
+
+  const handleLogin = useCallback(async () => {
+    if (loading) return;
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+
+    if (!normalizedEmail || !normalizedPassword) {
+      Alert.alert("Falta información", "Ingresa tu correo y contraseña.");
+      return;
+    }
+
     try {
       setLoading(true);
 
-      await signIn(email.trim(), password);
+      await signIn(normalizedEmail, normalizedPassword);
 
       router.replace("/home");
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Alert.alert(
+        "Error",
+        error?.message ?? "No pudimos iniciar sesión. Intenta nuevamente."
+      );
     } finally {
       setLoading(false);
     }
-  }
+  }, [email, password, loading]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <SafeAreaView style={styles.safeArea} edges={["left", "right", "bottom"]}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={styles.screen}>
-          <View style={styles.topBar} />
-
           <View style={styles.container}>
             <View style={styles.header}>
               <Text style={styles.title}>Iniciar sesión</Text>
@@ -69,6 +92,10 @@ export default function LoginScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="email-address"
+                textContentType="emailAddress"
+                autoComplete="email"
+                returnKeyType="next"
+                editable={!loading}
               />
 
               <Text style={styles.label}>Contraseña</Text>
@@ -80,11 +107,19 @@ export default function LoginScreen() {
                   placeholderTextColor="#B8B8B8"
                   style={styles.passwordInput}
                   secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  textContentType="password"
+                  autoComplete="password"
+                  returnKeyType="done"
+                  onSubmitEditing={handleLogin}
+                  editable={!loading}
                 />
 
                 <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
+                  onPress={handleTogglePassword}
                   activeOpacity={0.7}
+                  disabled={loading}
                 >
                   <Feather
                     name={showPassword ? "eye" : "eye-off"}
@@ -97,8 +132,9 @@ export default function LoginScreen() {
               <View style={styles.optionsRow}>
                 <TouchableOpacity
                   style={styles.rememberRow}
-                  onPress={() => setRemember(!remember)}
+                  onPress={handleToggleRemember}
                   activeOpacity={0.8}
+                  disabled={loading}
                 >
                   <View style={[styles.checkbox, remember && styles.checkboxActive]}>
                     {remember && <Feather name="check" size={10} color={BLACK} />}
@@ -107,7 +143,7 @@ export default function LoginScreen() {
                   <Text style={styles.rememberText}>Recuérdame</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity activeOpacity={0.7}>
+                <TouchableOpacity activeOpacity={0.7} disabled={loading}>
                   <Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
                 </TouchableOpacity>
               </View>
@@ -131,7 +167,11 @@ export default function LoginScreen() {
                 <View style={styles.dividerLine} />
               </View>
 
-              <TouchableOpacity style={styles.googleButton} activeOpacity={0.9}>
+              <TouchableOpacity
+                style={styles.googleButton}
+                activeOpacity={0.9}
+                disabled={loading}
+              >
                 <Text style={styles.googleIcon}>G</Text>
                 <Text style={styles.googleText}>Continuar con Google</Text>
               </TouchableOpacity>
@@ -140,7 +180,7 @@ export default function LoginScreen() {
             <View style={styles.footer}>
               <Text style={styles.footerText}>¿No tienes cuenta?</Text>
 
-              <TouchableOpacity onPress={() => router.push("/(auth)/register")}>
+              <TouchableOpacity onPress={handleGoToRegister} disabled={loading}>
                 <Text style={styles.footerLink}> Regístrate</Text>
               </TouchableOpacity>
             </View>
@@ -154,17 +194,12 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: YELLOW,
+    backgroundColor: "#FFFFFF",
   },
 
   screen: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-  },
-
-  topBar: {
-    height: 8,
-    backgroundColor: YELLOW,
   },
 
   container: {
