@@ -12,6 +12,7 @@
       "supportsTablet": true
     },
     "android": {
+      "navigationBarColor": "#11120F",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -19,7 +20,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.franx_dev.avi"
     },
     "web": {
       "output": "static",
@@ -27,6 +29,14 @@
     },
     "plugins": [
       "expo-router",
+      "expo-dev-client",
+      [
+        "expo-navigation-bar",
+        {
+          "position": "relative",
+          "style": "dark"
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -38,11 +48,26 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/avi_soft.mp3"
+          ]
+        }
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "dbd24a43-d12e-473e-a2a6-b3dd5c9fa97d"
+      }
     }
   }
 }

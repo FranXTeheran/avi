@@ -1,24 +1,65 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import { useEffect } from "react";
+import { Platform } from "react-native";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import * as NavigationBar from "expo-navigation-bar";
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+import { AuthProvider } from "@/src/context/AuthContext";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
+import {
+  ThemeProvider,
+  useTheme,
+} from "@/src/context/ThemeContext";
+
+function RootNavigator() {
+  const { mode, colors } = useTheme();
+
+  const isDark = mode === "dark";
+
+  useEffect(() => {
+    async function configureNavigationBar() {
+      if (Platform.OS !== "android") return;
+
+      await NavigationBar.setButtonStyleAsync(
+        isDark ? "light" : "dark"
+      );
+
+      await NavigationBar.setVisibilityAsync("visible");
+    }
+
+    configureNavigationBar();
+  }, [isDark, colors.background]) ;
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <>
+      <StatusBar
+        style={isDark ? "light" : "dark"}
+        translucent={false}
+        backgroundColor={colors.background}
+      />
+
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: {
+            backgroundColor: colors.background,
+          },
+        }}
+      />
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <SafeAreaProvider>
+    <AuthProvider>
+      <ThemeProvider>
+          <RootNavigator />
+      </ThemeProvider>
+    </AuthProvider>
+    </SafeAreaProvider>
   );
 }
