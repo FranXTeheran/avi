@@ -17,7 +17,7 @@ function sanitizePreferences(
         : DEFAULT_NOTIFICATION_PREFERENCES.enabled,
 
     sound:
-      value.sound === "avi_soft.mp3" ||
+      value.sound === "avi_soft.wav" ||
       value.sound === "default" ||
       value.sound === "silent"
         ? value.sound

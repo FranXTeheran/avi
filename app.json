@@ -58,7 +58,7 @@
         "expo-notifications",
         {
           "sounds": [
-            "./assets/sounds/avi_soft.mp3"
+            "./assets/sounds/avi_soft.wav"
           ],
             "icon": "./assets/notifications/notification-icon.png",
             "color": "#FFC21A"

@@ -169,7 +169,7 @@ export default function NotificationSettingsScreen() {
       {
         title: "AVI suave",
         subtitle: "Tu sonido personalizado.",
-        value: "avi_soft.mp3" as NotificationSound,
+        value: "avi_soft.wav" as NotificationSound,
       },
       {
         title: "Sistema",

@@ -28,7 +28,7 @@ type ReminderConfig = {
   daysBefore: number;
 };
 
-const CHANNEL_ID = "avi-default";
+const CHANNEL_ID = "avi-reminders-v2";
 const WEEKLY_CALM_ID = "weekly-calm";
 const DAY_MS = 1000 * 60 * 60 * 24;
 const BATCH_SIZE = 5;
@@ -114,9 +114,12 @@ function getActivityLabel(type?: string | null): string {
 
 function getContentSound(preferences: NotificationPreferences) {
   if (preferences.sound === "silent") return false;
-  if (preferences.sound === "default") return true;
 
-  return "avi_soft.mp3";
+  if (preferences.sound === "default") {
+    return "default";
+  }
+
+  return "avi_soft.wav";
 }
 
 function getNotificationCopy(
@@ -191,23 +194,26 @@ function getScheduledDate(
 async function configureAndroidChannel() {
   if (Platform.OS !== "android") return;
 
-    await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-      name: "AVI recordatorios",
-      description: "Recordatorios académicos suaves de AVI.",
-      importance: Notifications.AndroidImportance.DEFAULT,
-      sound: "avi_soft.mp3",
-      lightColor: "#FFC21A",
-    });
+  await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+    name: "AVI recordatorios",
+    description: "Recordatorios académicos suaves de AVI.",
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: "avi_soft.wav",
+    vibrationPattern: [0, 120, 80, 120],
+    lightColor: "#FFC21A",
+  });
 }
 
 export async function requestNotificationPermissions(): Promise<boolean> {
   await configureAndroidChannel();
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  const { status: existingStatus } =
+    await Notifications.getPermissionsAsync();
 
   if (existingStatus === "granted") return true;
 
-  const { status } = await Notifications.requestPermissionsAsync();
+  const { status } =
+    await Notifications.requestPermissionsAsync();
 
   return status === "granted";
 }
@@ -218,6 +224,7 @@ export async function sendTestNotification(): Promise<void> {
   if (!preferences.enabled) return;
 
   const hasPermission = await requestNotificationPermissions();
+
   if (!hasPermission) return;
 
   await Notifications.scheduleNotificationAsync({
@@ -230,15 +237,18 @@ export async function sendTestNotification(): Promise<void> {
         source: "avi",
       },
     },
+
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
       seconds: 3,
+      channelId: CHANNEL_ID,
     },
   });
 }
 
 async function cancelWeeklyCalmNotification() {
-  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  const scheduled =
+    await Notifications.getAllScheduledNotificationsAsync();
 
   const weeklyNotifications = scheduled.filter((notification) => {
     return notification.content.data?.type === WEEKLY_CALM_ID;
@@ -246,7 +256,9 @@ async function cancelWeeklyCalmNotification() {
 
   await Promise.all(
     weeklyNotifications.map((notification) =>
-      Notifications.cancelScheduledNotificationAsync(notification.identifier)
+      Notifications.cancelScheduledNotificationAsync(
+        notification.identifier
+      )
     )
   );
 }
@@ -257,16 +269,22 @@ export async function scheduleWeeklyCalmNotification(): Promise<void> {
   if (!preferences.enabled) return;
 
   const hasPermission = await requestNotificationPermissions();
+
   if (!hasPermission) return;
 
   await cancelWeeklyCalmNotification();
 
   const now = new Date();
+
   const dayOfWeek = now.getDay();
-  const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
+
+  const daysUntilSunday =
+    dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
 
   const nextSunday = new Date(now);
+
   nextSunday.setDate(now.getDate() + daysUntilSunday);
+
   nextSunday.setHours(20, 0, 0, 0);
 
   if (nextSunday <= now) return;
@@ -281,21 +299,29 @@ export async function scheduleWeeklyCalmNotification(): Promise<void> {
         source: "avi",
       },
     },
+
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
       date: nextSunday,
+      channelId: CHANNEL_ID,
     },
   });
 }
 
-export async function cancelActivityNotifications(activityId: string) {
+export async function cancelActivityNotifications(
+  activityId: string
+) {
   const { data, error } = await supabase
     .from("activity_notifications")
     .select("id, notification_id")
     .eq("activity_id", activityId);
 
   if (error) {
-    console.warn("Error loading activity notifications:", error.message);
+    console.warn(
+      "Error loading activity notifications:",
+      error.message
+    );
+
     return;
   }
 
@@ -308,7 +334,10 @@ export async function cancelActivityNotifications(activityId: string) {
           row.notification_id
         );
       } catch (error) {
-        console.warn("Error cancelling notification:", error);
+        console.warn(
+          "Error cancelling notification:",
+          error
+        );
       }
     })
   );
@@ -319,7 +348,10 @@ export async function cancelActivityNotifications(activityId: string) {
     .eq("activity_id", activityId);
 
   if (deleteError) {
-    console.warn("Error deleting activity notifications:", deleteError.message);
+    console.warn(
+      "Error deleting activity notifications:",
+      deleteError.message
+    );
   }
 }
 
@@ -330,6 +362,7 @@ export async function scheduleActivityNotifications(
 
   if (!preferences.enabled) {
     await cancelActivityNotifications(activity.id);
+
     return;
   }
 
@@ -337,21 +370,27 @@ export async function scheduleActivityNotifications(
 
   if (activity.status === "completed") {
     await cancelActivityNotifications(activity.id);
+
     return;
   }
 
-  const hasPermission = await requestNotificationPermissions();
+  const hasPermission =
+    await requestNotificationPermissions();
+
   if (!hasPermission) return;
 
   await cancelActivityNotifications(activity.id);
 
   const now = new Date();
+
   const dueDate = new Date(activity.due_at);
 
   if (Number.isNaN(dueDate.getTime())) return;
+
   if (dueDate <= now) return;
 
-  const reminders = getReminderConfig(activity.type);
+  const reminders =
+    getReminderConfig(activity.type);
 
   for (const reminder of reminders) {
     const scheduledFor = getScheduledDate(
@@ -362,54 +401,78 @@ export async function scheduleActivityNotifications(
 
     if (!scheduledFor || scheduledFor <= now) continue;
 
-    const copy = getNotificationCopy(activity, reminder.type);
+    const copy = getNotificationCopy(
+      activity,
+      reminder.type
+    );
 
-    const notificationId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: copy.title,
-        body: copy.body,
-        sound: getContentSound(preferences),
-        data: {
-          activityId: activity.id,
-          reminderType: reminder.type,
-          source: "avi",
+    const notificationId =
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: copy.title,
+          body: copy.body,
+          sound: getContentSound(preferences),
+          data: {
+            activityId: activity.id,
+            reminderType: reminder.type,
+            source: "avi",
+          },
         },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: scheduledFor,
-      },
-    });
 
-    const { error } = await supabase.from("activity_notifications").insert({
-      user_id: activity.user_id,
-      activity_id: activity.id,
-      notification_id: notificationId,
-      reminder_type: reminder.type,
-      scheduled_for: scheduledFor.toISOString(),
-    });
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: scheduledFor,
+          channelId: CHANNEL_ID,
+        },
+      });
+
+    const { error } = await supabase
+      .from("activity_notifications")
+      .insert({
+        user_id: activity.user_id,
+        activity_id: activity.id,
+        notification_id: notificationId,
+        reminder_type: reminder.type,
+        scheduled_for: scheduledFor.toISOString(),
+      });
 
     if (error) {
-      console.warn("Error saving notification:", error.message);
+      console.warn(
+        "Error saving notification:",
+        error.message
+      );
 
       try {
-        await Notifications.cancelScheduledNotificationAsync(notificationId);
+        await Notifications.cancelScheduledNotificationAsync(
+          notificationId
+        );
       } catch {}
     }
   }
 }
 
-function hasUrgentActivities(activities: ActivityForNotification[]) {
+function hasUrgentActivities(
+  activities: ActivityForNotification[]
+) {
   const now = new Date();
 
   return activities.some((activity) => {
-    if (!activity.due_at || activity.status === "completed") return false;
+    if (
+      !activity.due_at ||
+      activity.status === "completed"
+    ) {
+      return false;
+    }
 
     const dueDate = new Date(activity.due_at);
 
-    if (Number.isNaN(dueDate.getTime())) return false;
+    if (Number.isNaN(dueDate.getTime())) {
+      return false;
+    }
 
-    const diffDays = Math.ceil((dueDate.getTime() - now.getTime()) / DAY_MS);
+    const diffDays = Math.ceil(
+      (dueDate.getTime() - now.getTime()) / DAY_MS
+    );
 
     return diffDays >= 0 && diffDays <= 3;
   });
@@ -418,49 +481,78 @@ function hasUrgentActivities(activities: ActivityForNotification[]) {
 export async function rescheduleActivityNotifications(
   activities: ActivityForNotification[]
 ) {
-  const preferences = await getNotificationPreferences();
+  const preferences =
+    await getNotificationPreferences();
 
   if (!preferences.enabled) {
     await Notifications.cancelAllScheduledNotificationsAsync();
 
-    await supabase.from("activity_notifications").delete().neq("id", "");
+    await supabase
+      .from("activity_notifications")
+      .delete()
+      .neq("id", "");
 
     return;
   }
 
   if (activities.length === 0) {
     await scheduleWeeklyCalmNotification();
+
     return;
   }
 
-  const activityIds = activities.map((activity) => activity.id);
-
-  const { data: existingNotifications } = await supabase
-    .from("activity_notifications")
-    .select("activity_id")
-    .in("activity_id", activityIds);
-
-  const existingActivityIds = new Set(
-    (existingNotifications ?? []).map((row) => row.activity_id)
+  const activityIds = activities.map(
+    (activity) => activity.id
   );
 
-  const toReschedule = activities.filter((activity) => {
-    if (!activity.due_at) return false;
-    if (activity.status === "completed") return false;
+  const { data: existingNotifications } =
+    await supabase
+      .from("activity_notifications")
+      .select("activity_id")
+      .in("activity_id", activityIds);
 
-    const dueDate = new Date(activity.due_at);
+  const existingActivityIds = new Set(
+    (existingNotifications ?? []).map(
+      (row) => row.activity_id
+    )
+  );
 
-    if (Number.isNaN(dueDate.getTime())) return false;
-    if (dueDate <= new Date()) return false;
+  const toReschedule = activities.filter(
+    (activity) => {
+      if (!activity.due_at) return false;
 
-    return !existingActivityIds.has(activity.id);
-  });
+      if (activity.status === "completed") {
+        return false;
+      }
 
-  for (let i = 0; i < toReschedule.length; i += BATCH_SIZE) {
-    const batch = toReschedule.slice(i, i + BATCH_SIZE);
+      const dueDate = new Date(activity.due_at);
+
+      if (Number.isNaN(dueDate.getTime())) {
+        return false;
+      }
+
+      if (dueDate <= new Date()) {
+        return false;
+      }
+
+      return !existingActivityIds.has(activity.id);
+    }
+  );
+
+  for (
+    let i = 0;
+    i < toReschedule.length;
+    i += BATCH_SIZE
+  ) {
+    const batch = toReschedule.slice(
+      i,
+      i + BATCH_SIZE
+    );
 
     await Promise.all(
-      batch.map((activity) => scheduleActivityNotifications(activity))
+      batch.map((activity) =>
+        scheduleActivityNotifications(activity)
+      )
     );
   }
 
@@ -468,11 +560,16 @@ export async function rescheduleActivityNotifications(
     await cancelWeeklyCalmNotification();
   } else {
     scheduleWeeklyCalmNotification().catch((error) => {
-      console.warn("Error scheduling weekly calm:", error);
+      console.warn(
+        "Error scheduling weekly calm:",
+        error
+      );
     });
   }
 }
 
-export async function cancelCompletedActivityNotifications(activityId: string) {
+export async function cancelCompletedActivityNotifications(
+  activityId: string
+) {
   await cancelActivityNotifications(activityId);
 }

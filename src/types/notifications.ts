@@ -1,5 +1,5 @@
 export type NotificationSound =
-  | "avi_soft.mp3"
+  | "avi_soft.wav"
   | "default"
   | "silent";
 
@@ -13,6 +13,6 @@ export type NotificationPreferences = {
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   enabled: true,
-  sound: "avi_soft.mp3",
+  sound: "avi_soft.wav",
   vibration: "soft",
 };
