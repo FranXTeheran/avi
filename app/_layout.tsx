@@ -1,36 +1,35 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Platform } from "react-native";
 
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
-
-import { AuthProvider } from "@/src/context/AuthContext";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import {
-  ThemeProvider,
-  useTheme,
-} from "@/src/context/ThemeContext";
+import { AuthProvider } from "@/src/context/AuthContext";
+import { ThemeProvider, useTheme } from "@/src/context/ThemeContext";
 
 function RootNavigator() {
   const { mode, colors } = useTheme();
-
   const isDark = mode === "dark";
 
   useEffect(() => {
-    async function configureNavigationBar() {
-      if (Platform.OS !== "android") return;
+    if (Platform.OS !== "android") return;
 
-      await NavigationBar.setButtonStyleAsync(
-        isDark ? "light" : "dark"
-      );
+    NavigationBar.setBackgroundColorAsync(colors.background).catch(() => {});
+    NavigationBar.setButtonStyleAsync(isDark ? "light" : "dark").catch(() => {});
+    NavigationBar.setVisibilityAsync("visible").catch(() => {});
+  }, [colors.background, isDark]);
 
-      await NavigationBar.setVisibilityAsync("visible");
-    }
-
-    configureNavigationBar();
-  }, [isDark, colors.background]) ;
+  const screenOptions = useMemo(
+    () => ({
+      headerShown: false,
+      contentStyle: {
+        backgroundColor: colors.background,
+      },
+    }),
+    [colors.background]
+  );
 
   return (
     <>
@@ -40,14 +39,7 @@ function RootNavigator() {
         backgroundColor={colors.background}
       />
 
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: {
-            backgroundColor: colors.background,
-          },
-        }}
-      />
+      <Stack screenOptions={screenOptions} />
     </>
   );
 }
@@ -55,11 +47,11 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-    <AuthProvider>
       <ThemeProvider>
+        <AuthProvider>
           <RootNavigator />
+        </AuthProvider>
       </ThemeProvider>
-    </AuthProvider>
     </SafeAreaProvider>
   );
 }

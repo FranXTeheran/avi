@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -33,26 +33,36 @@ import {
 import {
   sendTestNotification,
   rescheduleActivityNotifications,
-  cancelActivityNotifications,
 } from "../src/services/activity-notification.service";
 
 import { getActivities } from "../src/services/activity.service";
+
+type Colors = ReturnType<typeof useAppTheme>["colors"];
+
+function arePreferencesEqual(
+  a: NotificationPreferences,
+  b: NotificationPreferences
+) {
+  return (
+    a.enabled === b.enabled &&
+    a.sound === b.sound &&
+    a.vibration === b.vibration
+  );
+}
 
 export default function NotificationSettingsScreen() {
   const { mode, colors } = useAppTheme();
   const isDark = mode === "dark";
 
-  const [preferences, setPreferences] =
-    useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
+  const [preferences, setPreferences] = useState<NotificationPreferences>(
+    DEFAULT_NOTIFICATION_PREFERENCES
+  );
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
 
-  useEffect(() => {
-    loadPreferences();
-  }, []);
-
-  async function loadPreferences() {
+  const loadPreferences = useCallback(async () => {
     try {
       const stored = await getNotificationPreferences();
       setPreferences(stored);
@@ -61,55 +71,135 @@ export default function NotificationSettingsScreen() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function updatePreferences(nextPreferences: NotificationPreferences) {
-    setPreferences(nextPreferences);
-    setSaving(true);
+  useEffect(() => {
+    loadPreferences();
+  }, [loadPreferences]);
+
+  const updatePreferences = useCallback(
+    async (nextPreferences: NotificationPreferences) => {
+      if (saving || arePreferencesEqual(preferences, nextPreferences)) return;
+
+      const previousPreferences = preferences;
+
+      setPreferences(nextPreferences);
+      setSaving(true);
+
+      try {
+        await saveNotificationPreferences(nextPreferences);
+
+        if (!nextPreferences.enabled) {
+          await Notifications.cancelAllScheduledNotificationsAsync();
+          return;
+        }
+
+        const activities = await getActivities();
+        rescheduleActivityNotifications(activities).catch((error) => {
+          console.warn("Error rescheduling notifications:", error);
+        });
+      } catch {
+        setPreferences(previousPreferences);
+
+        Alert.alert(
+          "No se pudo guardar",
+          "Intenta actualizar tus preferencias nuevamente."
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [preferences, saving]
+  );
+
+  const handleToggleEnabled = useCallback(
+    (enabled: boolean) => {
+      updatePreferences({
+        ...preferences,
+        enabled,
+      });
+    },
+    [preferences, updatePreferences]
+  );
+
+  const handleTestNotification = useCallback(async () => {
+    if (testing) return;
 
     try {
-      await saveNotificationPreferences(nextPreferences);
-
-      if (!nextPreferences.enabled) {
-        await Notifications.cancelAllScheduledNotificationsAsync();
-      } else {
-        const activities = await getActivities();
-        await rescheduleActivityNotifications(activities);
-      }
+      setTesting(true);
+      await sendTestNotification();
     } catch {
       Alert.alert(
-        "No se pudo guardar",
-        "Intenta actualizar tus preferencias nuevamente."
+        "No se pudo enviar",
+        "Intenta probar la notificación nuevamente."
       );
     } finally {
-      setSaving(false);
+      setTesting(false);
     }
-  }
+  }, [testing]);
 
-    async function handleTestNotification() {
-      try {
-        await sendTestNotification();
-      } catch {
-        Alert.alert(
-          "No se pudo enviar",
-          "Intenta probar la notificación nuevamente."
-        );
-      }
-    }
+  const handleGoBack = useCallback(() => {
+    router.back();
+  }, []);
 
-  function setSound(sound: NotificationSound) {
-    updatePreferences({
-      ...preferences,
-      sound,
-    });
-  }
+  const setSound = useCallback(
+    (sound: NotificationSound) => {
+      updatePreferences({
+        ...preferences,
+        sound,
+      });
+    },
+    [preferences, updatePreferences]
+  );
 
-  function setVibration(vibration: VibrationMode) {
-    updatePreferences({
-      ...preferences,
-      vibration,
-    });
-  }
+  const setVibration = useCallback(
+    (vibration: VibrationMode) => {
+      updatePreferences({
+        ...preferences,
+        vibration,
+      });
+    },
+    [preferences, updatePreferences]
+  );
+
+  const isBusy = saving || testing;
+
+  const soundOptions = useMemo(
+    () => [
+      {
+        title: "AVI suave",
+        subtitle: "Tu sonido personalizado.",
+        value: "avi_soft.mp3" as NotificationSound,
+      },
+      {
+        title: "Sistema",
+        subtitle: "Usar sonido estándar del teléfono.",
+        value: "default" as NotificationSound,
+      },
+      {
+        title: "Sin sonido",
+        subtitle: "Solo mostrar notificación.",
+        value: "silent" as NotificationSound,
+      },
+    ],
+    []
+  );
+
+  const vibrationOptions = useMemo(
+    () => [
+      {
+        title: "Suave",
+        subtitle: "Una vibración ligera.",
+        value: "soft" as VibrationMode,
+      },
+      {
+        title: "Desactivada",
+        subtitle: "Sin vibración.",
+        value: "off" as VibrationMode,
+      },
+    ],
+    []
+  );
 
   if (loading) {
     return (
@@ -157,7 +247,8 @@ export default function NotificationSettingsScreen() {
               },
             ]}
             activeOpacity={0.85}
-            onPress={() => router.back()}
+            onPress={handleGoBack}
+            disabled={isBusy}
           >
             <Feather name="chevron-left" size={24} color={colors.text} />
           </TouchableOpacity>
@@ -207,12 +298,8 @@ export default function NotificationSettingsScreen() {
 
             <Switch
               value={preferences.enabled}
-              onValueChange={(value) =>
-                updatePreferences({
-                  ...preferences,
-                  enabled: value,
-                })
-              }
+              onValueChange={handleToggleEnabled}
+              disabled={saving}
               trackColor={{
                 false: colors.border,
                 true: colors.primarySoft,
@@ -242,29 +329,17 @@ export default function NotificationSettingsScreen() {
             },
           ]}
         >
-          <OptionRow
-            title="AVI suave"
-            subtitle="Tu sonido personalizado."
-            selected={preferences.sound === "avi_soft.mp3"}
-            onPress={() => setSound("avi_soft.mp3")}
-            colors={colors}
-          />
-
-          <OptionRow
-            title="Sistema"
-            subtitle="Usar sonido estándar del teléfono."
-            selected={preferences.sound === "default"}
-            onPress={() => setSound("default")}
-            colors={colors}
-          />
-
-          <OptionRow
-            title="Sin sonido"
-            subtitle="Solo mostrar notificación."
-            selected={preferences.sound === null}
-            onPress={() => setSound(null)}
-            colors={colors}
-          />
+          {soundOptions.map((option) => (
+            <OptionRow
+              key={option.title}
+              title={option.title}
+              subtitle={option.subtitle}
+              selected={preferences.sound === option.value}
+              disabled={saving}
+              onPress={() => setSound(option.value)}
+              colors={colors}
+            />
+          ))}
         </View>
 
         <View style={styles.sectionHeader}>
@@ -287,21 +362,17 @@ export default function NotificationSettingsScreen() {
             },
           ]}
         >
-          <OptionRow
-            title="Suave"
-            subtitle="Una vibración ligera."
-            selected={preferences.vibration === "soft"}
-            onPress={() => setVibration("soft")}
-            colors={colors}
-          />
-
-          <OptionRow
-            title="Desactivada"
-            subtitle="Sin vibración."
-            selected={preferences.vibration === "off"}
-            onPress={() => setVibration("off")}
-            colors={colors}
-          />
+          {vibrationOptions.map((option) => (
+            <OptionRow
+              key={option.value}
+              title={option.title}
+              subtitle={option.subtitle}
+              selected={preferences.vibration === option.value}
+              disabled={saving}
+              onPress={() => setVibration(option.value)}
+              colors={colors}
+            />
+          ))}
         </View>
 
         <TouchableOpacity
@@ -311,39 +382,44 @@ export default function NotificationSettingsScreen() {
               backgroundColor: colors.primary,
               shadowOpacity: isDark ? 0 : 0.08,
             },
-            saving && styles.disabledButton,
+            isBusy && styles.disabledButton,
           ]}
           activeOpacity={0.9}
           onPress={handleTestNotification}
-          disabled={saving}
+          disabled={isBusy}
         >
-          <Text style={styles.testButtonText}>
-            {saving ? "Guardando..." : "Enviar prueba"}
-          </Text>
+          {isBusy ? (
+            <ActivityIndicator size="small" color="#11120F" />
+          ) : (
+            <Text style={styles.testButtonText}>Enviar prueba</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function OptionRow({
+const OptionRow = memo(function OptionRow({
   title,
   subtitle,
   selected,
+  disabled,
   onPress,
   colors,
 }: {
   title: string;
   subtitle: string;
   selected: boolean;
+  disabled?: boolean;
   onPress: () => void;
-  colors: any;
+  colors: Colors;
 }) {
   return (
     <TouchableOpacity
-      style={styles.optionRow}
+      style={[styles.optionRow, disabled && styles.disabledOption]}
       activeOpacity={0.85}
       onPress={onPress}
+      disabled={disabled}
     >
       <View style={styles.optionTextBox}>
         <Text style={[styles.optionTitle, { color: colors.text }]}>
@@ -363,16 +439,13 @@ function OptionRow({
       >
         {selected && (
           <View
-            style={[
-              styles.radioDot,
-              { backgroundColor: colors.primary },
-            ]}
+            style={[styles.radioDot, { backgroundColor: colors.primary }]}
           />
         )}
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -564,9 +637,16 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
 
+
+
   testButtonText: {
     color: "#11120F",
     fontSize: 15,
     fontWeight: "900",
   },
+
+    disabledOption: {
+    opacity: 0.65,
+  },
+
 });

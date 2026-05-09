@@ -1,6 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { sendTestNotification } from "@/src/services/activity-notification.service";
-
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -8,15 +6,14 @@ import {
   Text,
   View,
 } from "react-native";
-
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 import Screen from "../../src/components/Screen";
 import { getActivities } from "@/src/services/activity.service";
+import { sendTestNotification } from "@/src/services/activity-notification.service";
 import { useAppTheme } from "@/src/hooks/useAppTheme";
-
 import { spacing, radius } from "../../src/constants/theme";
 
 type Activity = {
@@ -41,11 +38,16 @@ type SmartAlert = {
   activityId?: string;
 };
 
-function getSubjectName(activity: Activity) {
-  if (activity.subject_name?.trim()) return activity.subject_name.trim();
-  if (activity.subject_code?.trim()) return activity.subject_code.trim();
+type Colors = ReturnType<typeof useAppTheme>["colors"];
 
-  return "Materia sin clasificar";
+const DAY_MS = 1000 * 60 * 60 * 24;
+const MAX_ALERTS = 8;
+
+function getSubjectName(activity: Activity) {
+  const subjectName = activity.subject_name?.trim();
+  const subjectCode = activity.subject_code?.trim();
+
+  return subjectName || subjectCode || "Materia sin clasificar";
 }
 
 function getDaysUntil(value: string | null) {
@@ -54,12 +56,12 @@ function getDaysUntil(value: string | null) {
   const now = new Date();
   const due = new Date(value);
 
+  if (Number.isNaN(due.getTime())) return null;
+
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
 
-  const diff = dueDay.getTime() - today.getTime();
-
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  return Math.ceil((dueDay.getTime() - today.getTime()) / DAY_MS);
 }
 
 function formatTimeLabel(days: number | null) {
@@ -82,32 +84,36 @@ function getActivityTypeLabel(activity: Activity) {
 
 function buildAlerts(activities: Activity[]): SmartAlert[] {
   const activeActivities = activities
-    .filter((activity) => activity.status !== "completed")
-    .filter((activity) => activity.due_at)
+    .filter((activity) => activity.status !== "completed" && activity.due_at)
     .map((activity) => ({
       activity,
       days: getDaysUntil(activity.due_at),
+      dueTime: new Date(activity.due_at || "").getTime(),
     }))
-    .filter((item) => item.days !== null)
-    .sort((a, b) => {
-      return (
-        new Date(a.activity.due_at || "").getTime() -
-        new Date(b.activity.due_at || "").getTime()
-      );
-    });
+    .filter(
+      (item) =>
+        item.days !== null &&
+        !Number.isNaN(item.dueTime)
+    )
+    .sort((a, b) => a.dueTime - b.dueTime);
+
+  const overdueCount = activeActivities.filter(
+    ({ days }) => days !== null && days < 0
+  ).length;
 
   const alerts: SmartAlert[] = activeActivities
     .filter(({ days }) => days !== null && days <= 7)
-    .slice(0, 8)
+    .slice(0, MAX_ALERTS)
     .map(({ activity, days }) => {
       const subject = getSubjectName(activity);
       const typeLabel = getActivityTypeLabel(activity);
+      const description = `${typeLabel} · ${subject}`;
 
       if (days !== null && days < 0) {
         return {
           id: activity.id,
           title: "Tienes una actividad vencida",
-          description: `${typeLabel} · ${subject}`,
+          description,
           time: formatTimeLabel(days),
           type: "urgent",
           activityId: activity.id,
@@ -118,7 +124,7 @@ function buildAlerts(activities: Activity[]): SmartAlert[] {
         return {
           id: activity.id,
           title: "Esta actividad vence hoy",
-          description: `${typeLabel} · ${subject}`,
+          description,
           time: "Hoy",
           type: "urgent",
           activityId: activity.id,
@@ -129,7 +135,7 @@ function buildAlerts(activities: Activity[]): SmartAlert[] {
         return {
           id: activity.id,
           title: "Mañana tienes una entrega",
-          description: `${typeLabel} · ${subject}`,
+          description,
           time: "Mañana",
           type: "warning",
           activityId: activity.id,
@@ -139,16 +145,12 @@ function buildAlerts(activities: Activity[]): SmartAlert[] {
       return {
         id: activity.id,
         title: "Próxima actividad",
-        description: `${typeLabel} · ${subject}`,
+        description,
         time: formatTimeLabel(days),
         type: "info",
         activityId: activity.id,
       };
     });
-
-  const overdueCount = activeActivities.filter(
-    ({ days }) => days !== null && days < 0
-  ).length;
 
   if (overdueCount > 1) {
     alerts.unshift({
@@ -176,7 +178,7 @@ function buildAlerts(activities: Activity[]): SmartAlert[] {
 function getAlertConfig(
   type: SmartAlert["type"],
   isDark: boolean,
-  colors: any
+  colors: Colors
 ) {
   if (type === "urgent") {
     return {
@@ -209,18 +211,85 @@ function getAlertConfig(
   };
 }
 
+type AlertCardProps = {
+  alert: SmartAlert;
+  colors: Colors;
+  isDark: boolean;
+  onOpenActivity: (activityId: string) => void;
+};
+
+const AlertCard = memo(function AlertCard({
+  alert,
+  colors,
+  isDark,
+  onOpenActivity,
+}: AlertCardProps) {
+  const config = useMemo(
+    () => getAlertConfig(alert.type, isDark, colors),
+    [alert.type, isDark, colors]
+  );
+
+  const handlePress = useCallback(() => {
+    if (alert.activityId) {
+      onOpenActivity(alert.activityId);
+    }
+  }, [alert.activityId, onOpenActivity]);
+
+  return (
+    <Pressable
+      style={[
+        styles.alertCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          shadowOpacity: isDark ? 0 : 0.05,
+        },
+      ]}
+      onPress={handlePress}
+      disabled={!alert.activityId}
+    >
+      <View style={[styles.leftAccent, { backgroundColor: config.color }]} />
+
+      <View style={[styles.alertIcon, { backgroundColor: config.background }]}>
+        <Ionicons name={config.icon as any} size={22} color={config.color} />
+      </View>
+
+      <View style={styles.alertContent}>
+        <View style={styles.alertTop}>
+          <Text
+            numberOfLines={2}
+            style={[styles.alertTitle, { color: colors.text }]}
+          >
+            {alert.title}
+          </Text>
+
+          <View style={[styles.timeBadge, { backgroundColor: config.background }]}>
+            <Text style={[styles.alertTime, { color: config.color }]}>
+              {alert.time}
+            </Text>
+          </View>
+        </View>
+
+        <Text
+          numberOfLines={2}
+          style={[styles.alertDescription, { color: colors.muted }]}
+        >
+          {alert.description}
+        </Text>
+      </View>
+    </Pressable>
+  );
+});
+
 export default function AlertsScreen() {
   const { mode, colors } = useAppTheme();
   const isDark = mode === "dark";
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [testingNotification, setTestingNotification] = useState(false);
 
-  useEffect(() => {
-    loadActivities();
-  }, []);
-
-  async function loadActivities() {
+  const loadActivities = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -232,11 +301,30 @@ export default function AlertsScreen() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  const alerts = useMemo(() => {
-    return buildAlerts(activities);
-  }, [activities]);
+  useEffect(() => {
+    loadActivities();
+  }, [loadActivities]);
+
+  const alerts = useMemo(() => buildAlerts(activities), [activities]);
+
+  const handleOpenActivity = useCallback((activityId: string) => {
+    router.push(`/activity/${activityId}`);
+  }, []);
+
+  const handleSendTestNotification = useCallback(async () => {
+    if (testingNotification) return;
+
+    try {
+      setTestingNotification(true);
+      await sendTestNotification();
+    } catch (error) {
+      console.log("Error enviando notificación de prueba:", error);
+    } finally {
+      setTestingNotification(false);
+    }
+  }, [testingNotification]);
 
   if (loading) {
     return (
@@ -269,9 +357,7 @@ export default function AlertsScreen() {
       <StatusBar style={isDark ? "light" : "dark"} translucent />
 
       <View style={styles.header}>
-        <Text style={[styles.label, { color: colors.primary }]}>
-          ALERTAS
-        </Text>
+        <Text style={[styles.label, { color: colors.primary }]}>ALERTAS</Text>
 
         <Text style={[styles.title, { color: colors.text }]}>
           No olvides lo importante
@@ -312,9 +398,7 @@ export default function AlertsScreen() {
             </Text>
 
             <Text style={[styles.heroText, { color: colors.text }]}>
-              {alerts.length === 1
-                ? "alerta por revisar"
-                : "alertas por revisar"}
+              {alerts.length === 1 ? "alerta por revisar" : "alertas por revisar"}
             </Text>
           </View>
         </View>
@@ -330,17 +414,17 @@ export default function AlertsScreen() {
           {
             backgroundColor: colors.primarySoft,
             borderColor: colors.border,
+            opacity: testingNotification ? 0.7 : 1,
           },
         ]}
-        onPress={async () => {
-          await sendTestNotification();
-        }}
+        onPress={handleSendTestNotification}
+        disabled={testingNotification}
       >
-        <Ionicons
-          name="paper-plane-outline"
-          size={18}
-          color={colors.text}
-        />
+        {testingNotification ? (
+          <ActivityIndicator size="small" color={colors.text} />
+        ) : (
+          <Ionicons name="paper-plane-outline" size={18} color={colors.text} />
+        )}
 
         <Text style={[styles.testButtonText, { color: colors.text }]}>
           Probar notificación
@@ -390,85 +474,15 @@ export default function AlertsScreen() {
           </Text>
         </View>
       ) : (
-        alerts.map((alert) => {
-          const config = getAlertConfig(alert.type, isDark, colors);
-
-          return (
-            <Pressable
-              key={alert.id}
-              style={[
-                styles.alertCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  shadowOpacity: isDark ? 0 : 0.05,
-                },
-              ]}
-              onPress={() => {
-                if (alert.activityId) {
-                  router.push(`/activity/${alert.activityId}`);
-                }
-              }}
-            >
-              <View
-                style={[
-                  styles.leftAccent,
-                  { backgroundColor: config.color },
-                ]}
-              />
-
-              <View
-                style={[
-                  styles.alertIcon,
-                  { backgroundColor: config.background },
-                ]}
-              >
-                <Ionicons
-                  name={config.icon as any}
-                  size={22}
-                  color={config.color}
-                />
-              </View>
-
-              <View style={styles.alertContent}>
-                <View style={styles.alertTop}>
-                  <Text
-                    numberOfLines={2}
-                    style={[styles.alertTitle, { color: colors.text }]}
-                  >
-                    {alert.title}
-                  </Text>
-
-                  <View
-                    style={[
-                      styles.timeBadge,
-                      { backgroundColor: config.background },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.alertTime,
-                        { color: config.color },
-                      ]}
-                    >
-                      {alert.time}
-                    </Text>
-                  </View>
-                </View>
-
-                <Text
-                  numberOfLines={2}
-                  style={[
-                    styles.alertDescription,
-                    { color: colors.muted },
-                  ]}
-                >
-                  {alert.description}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })
+        alerts.map((alert) => (
+          <AlertCard
+            key={alert.id}
+            alert={alert}
+            colors={colors}
+            isDark={isDark}
+            onOpenActivity={handleOpenActivity}
+          />
+        ))
       )}
     </Screen>
   );

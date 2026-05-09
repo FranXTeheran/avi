@@ -1,42 +1,110 @@
 import { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
 
-const SOFT_YELLOW = "#FFF4D2";
-const BLACK = "#1F1F1F";
-const GRAY = "#7A7A7A";
-const BORDER = "#EFEFEF";
+import { useAppTheme } from "@/src/hooks/useAppTheme";
 
 export default function ProcessingCalendarScreen() {
+  const { mode, colors } = useAppTheme();
+
+  const isDark = mode === "dark";
+
   useEffect(() => {
+    let mounted = true;
+
     const timeout = setTimeout(() => {
-      router.replace("/(tabs)/home");
+      if (!mounted) return;
+
+      router.replace("/home");
     }, 900);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      mounted = false;
+      clearTimeout(timeout);
+    };
   }, []);
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        {
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
+      <StatusBar style={isDark ? "light" : "dark"} translucent />
+
       <View style={styles.container}>
-        <View style={styles.mainIcon}>
-          <Feather name="calendar" size={42} color={BLACK} />
+        <View
+          style={[
+            styles.mainIcon,
+            {
+              backgroundColor: colors.primarySoft,
+            },
+          ]}
+        >
+          <Feather
+            name="calendar"
+            size={42}
+            color={colors.text}
+          />
         </View>
 
-        <ActivityIndicator color={BLACK} style={styles.loader} />
+        <ActivityIndicator
+          color={colors.primary}
+          style={styles.loader}
+        />
 
-        <Text style={styles.title}>Organizando tu semestre</Text>
+        <Text
+          style={[
+            styles.title,
+            {
+              color: colors.text,
+            },
+          ]}
+        >
+          Organizando tu semestre
+        </Text>
 
-        <Text style={styles.description}>
-          Estamos preparando tus actividades, entregas y recordatorios.
+        <Text
+          style={[
+            styles.description,
+            {
+              color: colors.muted,
+            },
+          ]}
+        >
+          Estamos preparando tus actividades,
+          entregas y recordatorios.
         </Text>
 
         <View style={styles.steps}>
-          <Step icon="check" text="Calendario importado" />
-          <Step icon="file-text" text="Actividades detectadas" />
-          <Step icon="bell" text="Recordatorios listos" />
+          <Step
+            icon="check"
+            text="Calendario importado"
+            colors={colors}
+          />
+
+          <Step
+            icon="file-text"
+            text="Actividades detectadas"
+            colors={colors}
+          />
+
+          <Step
+            icon="bell"
+            text="Recordatorios listos"
+            colors={colors}
+          />
         </View>
       </View>
     </View>
@@ -46,17 +114,47 @@ export default function ProcessingCalendarScreen() {
 function Step({
   icon,
   text,
+  colors,
 }: {
   icon: keyof typeof Feather.glyphMap;
   text: string;
+  colors: any;
 }) {
   return (
-    <View style={styles.step}>
-      <View style={styles.stepIcon}>
-        <Feather name={icon} size={16} color={BLACK} />
+    <View
+      style={[
+        styles.step,
+        {
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.stepIcon,
+          {
+            backgroundColor: colors.primarySoft,
+          },
+        ]}
+      >
+        <Feather
+          name={icon}
+          size={16}
+          color={colors.text}
+        />
       </View>
 
-      <Text style={styles.stepText}>{text}</Text>
+      <Text
+        style={[
+          styles.stepText,
+          {
+            color: colors.text,
+          },
+        ]}
+      >
+        {text}
+      </Text>
     </View>
   );
 }
@@ -64,12 +162,10 @@ function Step({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
   },
 
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
     paddingHorizontal: 38,
     alignItems: "center",
     justifyContent: "center",
@@ -79,7 +175,6 @@ const styles = StyleSheet.create({
     width: 104,
     height: 104,
     borderRadius: 32,
-    backgroundColor: SOFT_YELLOW,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 26,
@@ -92,7 +187,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 30,
     fontWeight: "900",
-    color: BLACK,
     textAlign: "center",
     lineHeight: 36,
     letterSpacing: -0.8,
@@ -102,7 +196,6 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontSize: 15,
     fontWeight: "700",
-    color: GRAY,
     textAlign: "center",
     lineHeight: 23,
     maxWidth: 300,
@@ -118,26 +211,32 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: "#FFFFFF",
     paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+
+    shadowColor: "#000000",
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+
+    elevation: 2,
   },
 
   stepIcon: {
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: SOFT_YELLOW,
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 12,
   },
 
   stepText: {
     fontSize: 14,
     fontWeight: "800",
-    color: BLACK,
   },
 });

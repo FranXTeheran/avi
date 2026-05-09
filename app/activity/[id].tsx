@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import {
 import { spacing, radius } from "../../src/constants/theme";
 
 const SIMA_URL = "https://sima.unicartagena.edu.co/landingPage/";
+const DAY_MS = 1000 * 60 * 60 * 24;
 
 type Activity = {
   id: string;
@@ -39,6 +40,106 @@ type Activity = {
   subject_code?: string | null;
 };
 
+type Colors = ReturnType<typeof useAppTheme>["colors"];
+
+function formatDate(date: string | null) {
+  if (!date) return "Sin fecha";
+
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) return "Sin fecha";
+
+  return parsedDate.toLocaleString("es-CO", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getSubjectName(activity: Activity) {
+  const subjectName = activity.subject_name?.trim();
+  const subjectCode = activity.subject_code?.trim();
+
+  return subjectName || subjectCode || "Materia sin clasificar";
+}
+
+function getTypeLabel(type?: string | null) {
+  if (type === "evaluation") return "Evaluación";
+  if (type === "protocol") return "Protocolo";
+  if (type === "final_project") return "Trabajo final";
+
+  return "Actividad académica";
+}
+
+function getStatusLabel(status?: string | null) {
+  if (status === "completed") return "Completada";
+  if (status === "overdue") return "Vencida";
+  if (status === "upcoming") return "Próxima";
+
+  return "Pendiente";
+}
+
+function getCompanionMessage(activity: Activity) {
+  if (activity.status === "completed") {
+    return "Ya está completada. Buen avance.";
+  }
+
+  if (!activity.due_at) {
+    return "Esta actividad aún no tiene una fecha clara.";
+  }
+
+  const now = new Date();
+  const due = new Date(activity.due_at);
+
+  if (Number.isNaN(due.getTime())) {
+    return "Esta actividad aún no tiene una fecha clara.";
+  }
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+
+  const diffDays = Math.ceil((dueDay.getTime() - today.getTime()) / DAY_MS);
+
+  if (diffDays < 0) {
+    return "Esta actividad ya venció. Vamos con calma, una cosa a la vez.";
+  }
+
+  if (diffDays === 0) {
+    return "Esta actividad vence hoy. Puedes resolverla paso a paso.";
+  }
+
+  if (diffDays === 1) {
+    return "Vence mañana. Buen momento para dejarla lista.";
+  }
+
+  return `Faltan ${diffDays} días. Todavía tienes margen para organizarte.`;
+}
+
+function getTone(activity: Activity, colors: Colors) {
+  if (activity.status === "completed") {
+    return {
+      color: colors.success,
+      soft: colors.successSoft,
+      icon: "checkmark-circle-outline" as const,
+    };
+  }
+
+  if (activity.status === "overdue") {
+    return {
+      color: colors.danger,
+      soft: colors.dangerSoft,
+      icon: "alert-circle-outline" as const,
+    };
+  }
+
+  return {
+    color: colors.primary,
+    soft: colors.primarySoft,
+    icon: "calendar-outline" as const,
+  };
+}
+
 export default function ActivityDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { mode, colors } = useAppTheme();
@@ -48,11 +149,7 @@ export default function ActivityDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
 
-  useEffect(() => {
-    loadActivity();
-  }, [id]);
-
-  async function loadActivity() {
+  const loadActivity = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -61,150 +158,103 @@ export default function ActivityDetailScreen() {
 
       setActivity(found || null);
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Alert.alert("Error", error?.message ?? "No pudimos cargar la actividad.");
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
 
-async function handleComplete() {
-  try {
+  useEffect(() => {
+    loadActivity();
+  }, [loadActivity]);
+
+  const isCompleted = activity?.status === "completed";
+
+  const subjectName = useMemo(
+    () => (activity ? getSubjectName(activity) : "Materia sin clasificar"),
+    [activity]
+  );
+
+  const typeLabel = useMemo(
+    () => getTypeLabel(activity?.type),
+    [activity?.type]
+  );
+
+  const statusLabel = useMemo(
+    () => getStatusLabel(activity?.status),
+    [activity?.status]
+  );
+
+  const formattedDate = useMemo(
+    () => formatDate(activity?.due_at ?? null),
+    [activity?.due_at]
+  );
+
+  const companionMessage = useMemo(
+    () => (activity ? getCompanionMessage(activity) : ""),
+    [activity]
+  );
+
+  const tone = useMemo(
+    () => (activity ? getTone(activity, colors) : null),
+    [activity, colors]
+  );
+
+  const handleComplete = useCallback(async () => {
     if (!activity?.id || completing) return;
 
-    // Optimistic update — actualiza UI inmediatamente
-    setActivity((prev) =>
-      prev ? { ...prev, status: "completed", } : prev
-    );
+    const previousStatus = activity.status;
 
-    setCompleting(true);
+    try {
+      setCompleting(true);
 
-    // Cancela notificaciones en segundo plano
-    cancelActivityNotifications(activity.id).catch((error) => {
-      console.warn("Error cancelling notifications:", error);
-    });
+      setActivity((prev) =>
+        prev ? { ...prev, status: "completed" } : prev
+      );
 
-    // Persiste en Supabase
-    await completeActivity(activity.id);
+      cancelActivityNotifications(activity.id).catch((error) => {
+        console.warn("Error cancelling notifications:", error);
+      });
 
-  } catch (error: any) {
-    // Revertir si falló
-    setActivity((prev) =>
-      prev ? { ...prev, status: "pending" } : prev
-    );
-    Alert.alert("Error", error.message);
-  } finally {
-    setCompleting(false);
-  }
-}
+      await completeActivity(activity.id);
+    } catch (error: any) {
+      setActivity((prev) =>
+        prev ? { ...prev, status: previousStatus } : prev
+      );
 
-  async function handleOpenPlatform() {
-    const canOpen = await Linking.canOpenURL(SIMA_URL);
+      Alert.alert(
+        "Error",
+        error?.message ?? "No pudimos marcar la actividad como completada."
+      );
+    } finally {
+      setCompleting(false);
+    }
+  }, [activity, completing]);
 
-    if (!canOpen) {
+  const handleOpenPlatform = useCallback(async () => {
+    try {
+      const canOpen = await Linking.canOpenURL(SIMA_URL);
+
+      if (!canOpen) {
+        Alert.alert(
+          "No se pudo abrir SIMA",
+          "Intenta ingresar manualmente desde tu navegador."
+        );
+        return;
+      }
+
+      await Linking.openURL(SIMA_URL);
+    } catch {
       Alert.alert(
         "No se pudo abrir SIMA",
         "Intenta ingresar manualmente desde tu navegador."
       );
-      return;
     }
+  }, []);
 
-    await Linking.openURL(SIMA_URL);
-  }
-
-  function formatDate(date: string | null) {
-    if (!date) return "Sin fecha";
-
-    return new Date(date).toLocaleString("es-CO", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
-  function getSubjectName() {
-    if (activity?.subject_name?.trim()) return activity.subject_name;
-    if (activity?.subject_code?.trim()) return activity.subject_code;
-
-    return "Materia sin clasificar";
-  }
-
-  function getTypeLabel(type?: string | null) {
-    if (type === "evaluation") return "Evaluación";
-    if (type === "protocol") return "Protocolo";
-    if (type === "final_project") return "Trabajo final";
-
-    return "Actividad académica";
-  }
-
-  function getStatusLabel(status?: string | null) {
-    if (status === "completed") return "Completada";
-    if (status === "overdue") return "Vencida";
-    if (status === "upcoming") return "Próxima";
-
-    return "Pendiente";
-  }
-
-  function getCompanionMessage() {
-    if (!activity) return "";
-
-    if (activity.status === "completed") {
-      return "Ya está completada. Buen avance.";
-    }
-
-    if (!activity.due_at) {
-      return "Esta actividad aún no tiene una fecha clara.";
-    }
-
-    const now = new Date();
-    const due = new Date(activity.due_at);
-
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
-
-    const diffDays = Math.ceil(
-      (dueDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    if (diffDays < 0) {
-      return "Esta actividad ya venció. Vamos con calma, una cosa a la vez.";
-    }
-
-    if (diffDays === 0) {
-      return "Esta actividad vence hoy. Puedes resolverla paso a paso.";
-    }
-
-    if (diffDays === 1) {
-      return "Vence mañana. Buen momento para dejarla lista.";
-    }
-
-    return `Faltan ${diffDays} días. Todavía tienes margen para organizarte.`;
-  }
-
-  function getTone() {
-    if (activity?.status === "completed") {
-      return {
-        color: colors.success,
-        soft: colors.successSoft,
-        icon: "checkmark-circle-outline",
-      };
-    }
-
-    if (activity?.status === "overdue") {
-      return {
-        color: colors.danger,
-        soft: colors.dangerSoft,
-        icon: "alert-circle-outline",
-      };
-    }
-
-    return {
-      color: colors.primary,
-      soft: colors.primarySoft,
-      icon: "calendar-outline",
-    };
-  }
+  const handleGoBack = useCallback(() => {
+    router.back();
+  }, []);
 
   if (loading) {
     return (
@@ -227,7 +277,7 @@ async function handleComplete() {
     );
   }
 
-  if (!activity) {
+  if (!activity || !tone) {
     return (
       <Screen
         contentStyle={[
@@ -257,7 +307,7 @@ async function handleComplete() {
 
           <Pressable
             style={[styles.backLargeButton, { backgroundColor: colors.primary }]}
-            onPress={() => router.back()}
+            onPress={handleGoBack}
           >
             <Text style={[styles.backLargeButtonText, { color: "#11120F" }]}>
               Volver
@@ -267,9 +317,6 @@ async function handleComplete() {
       </Screen>
     );
   }
-
-  const isCompleted = activity.status === "completed";
-  const tone = getTone();
 
   return (
     <Screen
@@ -290,7 +337,7 @@ async function handleComplete() {
               shadowOpacity: isDark ? 0 : 0.08,
             },
           ]}
-          onPress={() => router.back()}
+          onPress={handleGoBack}
         >
           <Ionicons name="arrow-back" size={22} color={colors.text} />
         </Pressable>
@@ -312,12 +359,12 @@ async function handleComplete() {
       >
         <View style={styles.heroTop}>
           <View style={[styles.iconCircle, { backgroundColor: tone.soft }]}>
-            <Ionicons name={tone.icon as any} size={30} color={tone.color} />
+            <Ionicons name={tone.icon} size={30} color={tone.color} />
           </View>
 
           <View style={[styles.statusPill, { backgroundColor: tone.soft }]}>
             <Text style={[styles.statusPillText, { color: tone.color }]}>
-              {getStatusLabel(activity.status)}
+              {statusLabel}
             </Text>
           </View>
         </View>
@@ -327,27 +374,17 @@ async function handleComplete() {
         </Text>
 
         <Text style={[styles.meta, { color: colors.muted }]}>
-          {getTypeLabel(activity.type)} · {getSubjectName()}
+          {typeLabel} · {subjectName}
         </Text>
       </View>
 
-      <View
-        style={[
-          styles.companionCard,
-          { backgroundColor: colors.primarySoft },
-        ]}
-      >
-        <View
-          style={[
-            styles.companionIcon,
-            { backgroundColor: colors.surface },
-          ]}
-        >
+      <View style={[styles.companionCard, { backgroundColor: colors.primarySoft }]}>
+        <View style={[styles.companionIcon, { backgroundColor: colors.surface }]}>
           <Ionicons name="sparkles-outline" size={22} color={colors.text} />
         </View>
 
         <Text style={[styles.companionText, { color: colors.text }]}>
-          {getCompanionMessage()}
+          {companionMessage}
         </Text>
       </View>
 
@@ -384,23 +421,19 @@ async function handleComplete() {
           Información
         </Text>
 
-        <InfoRow
-          label="Estado"
-          value={getStatusLabel(activity.status)}
-          colors={colors}
-        />
+        <InfoRow label="Estado" value={statusLabel} colors={colors} />
         <InfoRow
           label="Prioridad"
           value={activity.priority || "Normal"}
           colors={colors}
         />
-        <InfoRow label="Materia" value={getSubjectName()} colors={colors} />
+        <InfoRow label="Materia" value={subjectName} colors={colors} />
         <InfoRow
           label="Unidad"
           value={activity.unit_number ? `Unidad ${activity.unit_number}` : "-"}
           colors={colors}
         />
-        <InfoRow label="Fecha" value={formatDate(activity.due_at)} colors={colors} />
+        <InfoRow label="Fecha" value={formattedDate} colors={colors} />
       </View>
 
       {!isCompleted ? (
@@ -469,14 +502,14 @@ async function handleComplete() {
   );
 }
 
-function InfoRow({
+const InfoRow = memo(function InfoRow({
   label,
   value,
   colors,
 }: {
   label: string;
   value: string;
-  colors: any;
+  colors: Colors;
 }) {
   return (
     <View style={[styles.infoRow, { borderBottomColor: colors.border }]}>
@@ -484,7 +517,8 @@ function InfoRow({
       <Text style={[styles.infoValue, { color: colors.text }]}>{value}</Text>
     </View>
   );
-}
+});
+
 
 const styles = StyleSheet.create({
   screenContent: {

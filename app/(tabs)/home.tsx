@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Text,
   StyleSheet,
@@ -37,7 +37,11 @@ type GreetingContext = {
   image: "calm" | "attention" | "support" | "welcome";
 };
 
-// Fuera del componente — no se recrean en cada render
+type Colors = ReturnType<typeof useAppTheme>["colors"];
+
+const DAY_MS = 1000 * 60 * 60 * 24;
+const TOP_DELIVERIES_LIMIT = 3;
+
 const welcomeImages = {
   welcome: require("../../assets/images/home-welcome.png"),
   calm: require("../../assets/images/home-calm.png"),
@@ -45,9 +49,25 @@ const welcomeImages = {
   support: require("../../assets/images/home-support.png"),
 };
 
+function isValidDate(date: Date) {
+  return !Number.isNaN(date.getTime());
+}
+
+function isSameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 function formatShortDate(date: string | null): string {
   if (!date) return "Sin fecha";
-  return new Date(date).toLocaleDateString("es-CO", {
+
+  const parsedDate = new Date(date);
+  if (!isValidDate(parsedDate)) return "Sin fecha";
+
+  return parsedDate.toLocaleDateString("es-CO", {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -56,10 +76,12 @@ function formatShortDate(date: string | null): string {
 
 function daysUntil(date: string | null): number | null {
   if (!date) return null;
-  const now = new Date();
+
   const due = new Date(date);
-  const diff = due.getTime() - now.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  if (!isValidDate(due)) return null;
+
+  const now = new Date();
+  return Math.ceil((due.getTime() - now.getTime()) / DAY_MS);
 }
 
 function priorityScore(activity: Activity): number {
@@ -67,89 +89,90 @@ function priorityScore(activity: Activity): number {
   if (activity.type === "evaluation") return 1;
   if (activity.type === "final_project") return 2;
   if (activity.type === "protocol") return 3;
+
   return 4;
 }
 
-function getGreeting(
-  userName: string,
-  activities: Activity[]
-): GreetingContext {
+function getGreeting(userName: string, activities: Activity[]): GreetingContext {
   const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+
   const hour = now.getHours();
-
-  const pending = activities.filter(
-    (a) => a.status !== "completed" && a.due_at && new Date(a.due_at) >= now
-  );
-
-  const overdue = activities.filter(
-    (a) => a.status !== "completed" && a.due_at && new Date(a.due_at) < now
-  );
-
-  const dueToday = pending.filter((a) => {
-    const due = new Date(a.due_at!);
-    return (
-      due.getFullYear() === now.getFullYear() &&
-      due.getMonth() === now.getMonth() &&
-      due.getDate() === now.getDate()
-    );
-  });
-
-  const dueTomorrow = pending.filter((a) => {
-    const due = new Date(a.due_at!);
-    const tomorrow = new Date(now);
-    tomorrow.setDate(now.getDate() + 1);
-    return (
-      due.getFullYear() === tomorrow.getFullYear() &&
-      due.getMonth() === tomorrow.getMonth() &&
-      due.getDate() === tomorrow.getDate()
-    );
-  });
-
   const timeGreeting =
     hour < 12 ? "Buenos días" : hour < 18 ? "Buenas tardes" : "Buenas noches";
 
-  if (overdue.length > 0) {
+  let overdueCount = 0;
+  let pendingCount = 0;
+  let dueTodayCount = 0;
+  let dueTomorrowCount = 0;
+  let firstToday: Activity | null = null;
+  let firstTomorrow: Activity | null = null;
+
+  for (const activity of activities) {
+    if (activity.status === "completed" || !activity.due_at) continue;
+
+    const due = new Date(activity.due_at);
+    if (!isValidDate(due)) continue;
+
+    if (due < now) {
+      overdueCount += 1;
+      continue;
+    }
+
+    pendingCount += 1;
+
+    if (isSameDay(due, now)) {
+      dueTodayCount += 1;
+      if (!firstToday) firstToday = activity;
+    }
+
+    if (isSameDay(due, tomorrow)) {
+      dueTomorrowCount += 1;
+      if (!firstTomorrow) firstTomorrow = activity;
+    }
+  }
+
+  if (overdueCount > 0) {
     return {
       title: `${timeGreeting}, ${userName}`,
       subtitle:
-        overdue.length === 1
+        overdueCount === 1
           ? "Tienes una actividad vencida. Una cosa a la vez."
-          : `Tienes ${overdue.length} actividades vencidas. Vamos paso a paso.`,
+          : `Tienes ${overdueCount} actividades vencidas. Vamos paso a paso.`,
       cardTitle: "Vamos paso a paso ",
       cardDescription: "AVI te ayuda a organizarte. Empieza por la más cercana.",
       image: "support",
     };
   }
 
-  if (dueToday.length > 0) {
-    const first = dueToday[0];
+  if (dueTodayCount > 0 && firstToday) {
     return {
       title: `${timeGreeting}, ${userName}`,
       subtitle:
-        dueToday.length === 1
+        dueTodayCount === 1
           ? "Hoy vence una actividad. Puedes con esto."
-          : `Hoy vencen ${dueToday.length} actividades. Una cosa a la vez.`,
+          : `Hoy vencen ${dueTodayCount} actividades. Una cosa a la vez.`,
       cardTitle: "Hoy tienes entregas ",
       cardDescription:
-        dueToday.length === 1
-          ? `${first.title}. Todavía tienes tiempo.`
-          : `${first.title} y ${dueToday.length - 1} más. Puedes organizarte con calma.`,
+        dueTodayCount === 1
+          ? `${firstToday.title}. Todavía tienes tiempo.`
+          : `${firstToday.title} y ${dueTodayCount - 1} más. Puedes organizarte con calma.`,
       image: "attention",
     };
   }
 
-  if (dueTomorrow.length > 0) {
-    const first = dueTomorrow[0];
+  if (dueTomorrowCount > 0 && firstTomorrow) {
     return {
       title: `${timeGreeting}, ${userName}`,
       subtitle: "Mañana tienes entregas. Buen momento para adelantar.",
       cardTitle: "Mañana vence algo ",
-      cardDescription: `${first.title}. Buen momento para dejarlo listo hoy.`,
+      cardDescription: `${firstTomorrow.title}. Buen momento para dejarlo listo hoy.`,
       image: "attention",
     };
   }
 
-  if (pending.length > 0) {
+  if (pendingCount > 0) {
     return {
       title: `${timeGreeting}, ${userName}`,
       subtitle: "Tu semana se ve manejable. Sigue así.",
@@ -168,6 +191,97 @@ function getGreeting(
   };
 }
 
+const QuickCard = memo(function QuickCard({
+  title,
+  subtitle,
+  icon,
+  colors,
+  isDark,
+  onPress,
+}: {
+  title: string;
+  subtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  colors: Colors;
+  isDark: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={[
+        styles.quickCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          shadowOpacity: isDark ? 0 : 0.06,
+        },
+      ]}
+      onPress={onPress}
+    >
+      <View style={[styles.quickIcon, { backgroundColor: colors.primarySoft }]}>
+        <Ionicons name={icon} size={24} color={colors.text} />
+      </View>
+
+      <Text style={[styles.quickTitle, { color: colors.text }]}>{title}</Text>
+
+      <Text style={[styles.quickSubtitle, { color: colors.muted }]}>
+        {subtitle}
+      </Text>
+    </Pressable>
+  );
+});
+
+const DeliveryItem = memo(function DeliveryItem({
+  activity,
+  isLast,
+  colors,
+  onPress,
+}: {
+  activity: Activity;
+  isLast: boolean;
+  colors: Colors;
+  onPress: (id: string) => void;
+}) {
+  const days = daysUntil(activity.due_at);
+
+  const handlePress = useCallback(() => {
+    onPress(activity.id);
+  }, [activity.id, onPress]);
+
+  return (
+    <Pressable
+      style={[
+        styles.deliveryItem,
+        !isLast && [
+          styles.deliveryBorder,
+          { borderBottomColor: colors.border },
+        ],
+      ]}
+      onPress={handlePress}
+    >
+      <View style={[styles.deliveryDateBox, { backgroundColor: colors.primarySoft }]}>
+        <Ionicons name="calendar-outline" size={18} color={colors.text} />
+      </View>
+
+      <View style={styles.deliveryInfo}>
+        <Text
+          style={[styles.deliveryTitle, { color: colors.text }]}
+          numberOfLines={1}
+        >
+          {activity.title}
+        </Text>
+
+        <Text style={[styles.deliveryMeta, { color: colors.muted }]}>
+          {formatShortDate(activity.due_at)}
+          {days !== null && ` · ${days === 0 ? "vence hoy" : `en ${days} días`}`}
+        </Text>
+      </View>
+
+      <Ionicons name="chevron-forward" size={18} color={colors.subtle} />
+    </Pressable>
+  );
+});
+
 export default function HomeScreen() {
   const { mode, colors } = useAppTheme();
   const isDark = mode === "dark";
@@ -175,41 +289,41 @@ export default function HomeScreen() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("compañero");
-  const [profileLoaded, setProfileLoaded] = useState(false);
 
-  const loadActivities = useCallback(async () => {
+  const profileLoadedRef = useRef(false);
+
+  const loadHomeData = useCallback(async () => {
     try {
       setLoading(true);
 
-      // Solo carga el perfil la primera vez
-      if (!profileLoaded) {
+      if (!profileLoadedRef.current) {
         const [profile, data] = await Promise.all([
           getProfile(),
-          getActivities({ forceRefresh: true }),
+          getActivities(),
         ]);
 
         if (profile?.name) {
           setUserName(profile.name.split(" ")[0]);
         }
 
-        setProfileLoaded(true);
-        setActivities(data);
-      } else {
-        const data = await getActivities({ forceRefresh: true });
-        setActivities(data);
+        profileLoadedRef.current = true;
+        setActivities(data ?? []);
+        return;
       }
+
+      const data = await getActivities();
+      setActivities(data ?? []);
     } catch (error) {
       console.log("Error cargando home:", error);
     } finally {
       setLoading(false);
     }
-  }, [profileLoaded]);
+  }, []);
 
-  // Se refresca cada vez que el Home vuelve a estar en foco
   useFocusEffect(
     useCallback(() => {
-      loadActivities();
-    }, [loadActivities])
+      loadHomeData();
+    }, [loadHomeData])
   );
 
   const upcoming = useMemo(() => {
@@ -217,31 +331,37 @@ export default function HomeScreen() {
 
     return activities
       .filter((activity) => {
-        if (activity.status === "completed") return false;
-        if (!activity.due_at) return false;
-        return new Date(activity.due_at) >= now;
+        if (activity.status === "completed" || !activity.due_at) return false;
+
+        const due = new Date(activity.due_at);
+        return isValidDate(due) && due >= now;
       })
       .sort((a, b) => {
         const priorityA = priorityScore(a);
         const priorityB = priorityScore(b);
 
-        if (priorityA !== priorityB) {
-          return priorityA - priorityB;
-        }
+        if (priorityA !== priorityB) return priorityA - priorityB;
 
         return new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime();
       });
   }, [activities]);
 
-  const topThree = useMemo(() => upcoming.slice(0, 3), [upcoming]);
+  const topThree = useMemo(
+    () => upcoming.slice(0, TOP_DELIVERIES_LIMIT),
+    [upcoming]
+  );
 
   const nextActivity = topThree[0];
 
   const completionPercent = useMemo(() => {
     if (activities.length === 0) return 0;
-    const completedCount = activities.filter(
-      (a) => a.status === "completed"
-    ).length;
+
+    let completedCount = 0;
+
+    for (const activity of activities) {
+      if (activity.status === "completed") completedCount += 1;
+    }
+
     return Math.round((completedCount / activities.length) * 100);
   }, [activities]);
 
@@ -249,6 +369,50 @@ export default function HomeScreen() {
     () => getGreeting(userName, activities),
     [userName, activities]
   );
+
+  const handleGoProfile = useCallback(() => {
+    router.push("/profile" as any);
+  }, []);
+
+  const handleGoCalendar = useCallback(() => {
+    router.push("/calendar" as any);
+  }, []);
+
+  const handleGoSubjects = useCallback(() => {
+    router.push("/subjects" as any);
+  }, []);
+
+  const handleGoAlerts = useCallback(() => {
+    router.push("/alerts" as any);
+  }, []);
+
+  const handleGoProgress = useCallback(() => {
+    router.push("/activities?filter=completed" as any);
+  }, []);
+
+  const handleGoPending = useCallback(() => {
+    router.push("/activities?filter=pending" as any);
+  }, []);
+
+  const handleGoImportCalendar = useCallback(() => {
+    router.push("/(onboarding)/import-calendar" as any);
+  }, []);
+
+  const handleOpenActivity = useCallback((id: string) => {
+    router.push({
+      pathname: "/activity/[id]",
+      params: { id },
+    });
+  }, []);
+
+  const handleSummaryPress = useCallback(() => {
+    if (nextActivity) {
+      handleOpenActivity(nextActivity.id);
+      return;
+    }
+
+    handleGoPending();
+  }, [nextActivity, handleOpenActivity, handleGoPending]);
 
   if (loading) {
     return (
@@ -292,17 +456,13 @@ export default function HomeScreen() {
         <View style={[styles.page, { backgroundColor: colors.background }]}>
           <View style={styles.header}>
             <View>
-              <Text style={[styles.logo, { color: colors.primary }]}>
-                AVI
-              </Text>
+              <Text style={[styles.logo, { color: colors.primary }]}>AVI</Text>
 
               <Text style={[styles.greeting, { color: colors.text }]}>
                 {greeting.title}
               </Text>
 
-              <Text
-                style={[styles.headerSubtitle, { color: colors.muted }]}
-              >
+              <Text style={[styles.headerSubtitle, { color: colors.muted }]}>
                 {greeting.subtitle}
               </Text>
             </View>
@@ -316,13 +476,9 @@ export default function HomeScreen() {
                   shadowOpacity: isDark ? 0 : 0.08,
                 },
               ]}
-              onPress={() => router.push("/profile" as any)}
+              onPress={handleGoProfile}
             >
-              <Ionicons
-                name="person-outline"
-                size={24}
-                color={colors.text}
-              />
+              <Ionicons name="person-outline" size={24} color={colors.text} />
             </Pressable>
           </View>
 
@@ -337,9 +493,7 @@ export default function HomeScreen() {
                 {greeting.cardTitle}
               </Text>
 
-              <Text
-                style={[styles.welcomeDescription, { color: colors.muted }]}
-              >
+              <Text style={[styles.welcomeDescription, { color: colors.muted }]}>
                 {greeting.cardDescription}
               </Text>
             </View>
@@ -360,14 +514,7 @@ export default function HomeScreen() {
                 shadowOpacity: isDark ? 0 : 0.1,
               },
             ]}
-            onPress={() =>
-              nextActivity
-                ? router.push({
-                    pathname: "/activity/[id]",
-                    params: { id: nextActivity.id },
-                  })
-                : router.push("/activities?filter=pending" as any)
-            }
+            onPress={handleSummaryPress}
           >
             <View
               style={[
@@ -402,149 +549,48 @@ export default function HomeScreen() {
             </View>
 
             <View
-              style={[
-                styles.summaryCheck,
-                { backgroundColor: colors.primary },
-              ]}
+              style={[styles.summaryCheck, { backgroundColor: colors.primary }]}
             >
               <Ionicons name="checkmark" size={22} color="#FFFFFF" />
             </View>
           </Pressable>
 
           <View style={styles.quickGrid}>
-            <Pressable
-              style={[
-                styles.quickCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  shadowOpacity: isDark ? 0 : 0.06,
-                },
-              ]}
-              onPress={() => router.push("/calendar" as any)}
-            >
-              <View
-                style={[
-                  styles.quickIcon,
-                  { backgroundColor: colors.primarySoft },
-                ]}
-              >
-                <Ionicons
-                  name="calendar-outline"
-                  size={24}
-                  color={colors.text}
-                />
-              </View>
+            <QuickCard
+              title="Agenda"
+              subtitle="Ver calendario"
+              icon="calendar-outline"
+              colors={colors}
+              isDark={isDark}
+              onPress={handleGoCalendar}
+            />
 
-              <Text style={[styles.quickTitle, { color: colors.text }]}>
-                Agenda
-              </Text>
+            <QuickCard
+              title="Materias"
+              subtitle="Tus cursos"
+              icon="book-outline"
+              colors={colors}
+              isDark={isDark}
+              onPress={handleGoSubjects}
+            />
 
-              <Text style={[styles.quickSubtitle, { color: colors.muted }]}>
-                Ver calendario
-              </Text>
-            </Pressable>
+            <QuickCard
+              title="Alertas"
+              subtitle="Recordatorios"
+              icon="notifications-outline"
+              colors={colors}
+              isDark={isDark}
+              onPress={handleGoAlerts}
+            />
 
-            <Pressable
-              style={[
-                styles.quickCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  shadowOpacity: isDark ? 0 : 0.06,
-                },
-              ]}
-              onPress={() => router.push("/subjects" as any)}
-            >
-              <View
-                style={[
-                  styles.quickIcon,
-                  { backgroundColor: colors.primarySoft },
-                ]}
-              >
-                <Ionicons
-                  name="book-outline"
-                  size={24}
-                  color={colors.text}
-                />
-              </View>
-
-              <Text style={[styles.quickTitle, { color: colors.text }]}>
-                Materias
-              </Text>
-
-              <Text style={[styles.quickSubtitle, { color: colors.muted }]}>
-                Tus cursos
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.quickCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  shadowOpacity: isDark ? 0 : 0.06,
-                },
-              ]}
-              onPress={() => router.push("/alerts" as any)}
-            >
-              <View
-                style={[
-                  styles.quickIcon,
-                  { backgroundColor: colors.primarySoft },
-                ]}
-              >
-                <Ionicons
-                  name="notifications-outline"
-                  size={24}
-                  color={colors.text}
-                />
-              </View>
-
-              <Text style={[styles.quickTitle, { color: colors.text }]}>
-                Alertas
-              </Text>
-
-              <Text style={[styles.quickSubtitle, { color: colors.muted }]}>
-                Recordatorios
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.quickCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  shadowOpacity: isDark ? 0 : 0.06,
-                },
-              ]}
-              onPress={() =>
-                router.push("/activities?filter=completed" as any)
-              }
-            >
-              <View
-                style={[
-                  styles.quickIcon,
-                  { backgroundColor: colors.primarySoft },
-                ]}
-              >
-                <Ionicons
-                  name="bar-chart-outline"
-                  size={24}
-                  color={colors.text}
-                />
-              </View>
-
-              <Text style={[styles.quickTitle, { color: colors.text }]}>
-                Progreso
-              </Text>
-
-              <Text style={[styles.quickSubtitle, { color: colors.muted }]}>
-                {completionPercent}% avance
-              </Text>
-            </Pressable>
+            <QuickCard
+              title="Progreso"
+              subtitle={`${completionPercent}% avance`}
+              icon="bar-chart-outline"
+              colors={colors}
+              isDark={isDark}
+              onPress={handleGoProgress}
+            />
           </View>
 
           <View style={styles.sectionHeader}>
@@ -552,11 +598,7 @@ export default function HomeScreen() {
               Próximas entregas
             </Text>
 
-            <Pressable
-              onPress={() =>
-                router.push("/activities?filter=pending" as any)
-              }
-            >
+            <Pressable onPress={handleGoPending}>
               <Text style={[styles.sectionLink, { color: colors.primary }]}>
                 Ver todas
               </Text>
@@ -597,64 +639,15 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : (
-              topThree.map((activity, index) => {
-                const days = daysUntil(activity.due_at);
-
-                return (
-                  <Pressable
-                    key={activity.id}
-                    style={[
-                      styles.deliveryItem,
-                      index !== topThree.length - 1 && [
-                        styles.deliveryBorder,
-                        { borderBottomColor: colors.border },
-                      ],
-                    ]}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/activity/[id]",
-                        params: { id: activity.id },
-                      })
-                    }
-                  >
-                    <View
-                      style={[
-                        styles.deliveryDateBox,
-                        { backgroundColor: colors.primarySoft },
-                      ]}
-                    >
-                      <Ionicons
-                        name="calendar-outline"
-                        size={18}
-                        color={colors.text}
-                      />
-                    </View>
-
-                    <View style={styles.deliveryInfo}>
-                      <Text
-                        style={[styles.deliveryTitle, { color: colors.text }]}
-                        numberOfLines={1}
-                      >
-                        {activity.title}
-                      </Text>
-
-                      <Text
-                        style={[styles.deliveryMeta, { color: colors.muted }]}
-                      >
-                        {formatShortDate(activity.due_at)}
-                        {days !== null &&
-                          ` · ${days === 0 ? "vence hoy" : `en ${days} días`}`}
-                      </Text>
-                    </View>
-
-                    <Ionicons
-                      name="chevron-forward"
-                      size={18}
-                      color={colors.subtle}
-                    />
-                  </Pressable>
-                );
-              })
+              topThree.map((activity, index) => (
+                <DeliveryItem
+                  key={activity.id}
+                  activity={activity}
+                  isLast={index === topThree.length - 1}
+                  colors={colors}
+                  onPress={handleOpenActivity}
+                />
+              ))
             )}
           </View>
 
@@ -666,15 +659,10 @@ export default function HomeScreen() {
                 borderColor: colors.border,
               },
             ]}
-            onPress={() =>
-              router.push("/(onboarding)/import-calendar" as any)
-            }
+            onPress={handleGoImportCalendar}
           >
             <View
-              style={[
-                styles.importIcon,
-                { backgroundColor: colors.primarySoft },
-              ]}
+              style={[styles.importIcon, { backgroundColor: colors.primarySoft }]}
             >
               <Ionicons
                 name="cloud-upload-outline"
@@ -688,25 +676,18 @@ export default function HomeScreen() {
                 Actualizar calendario
               </Text>
 
-              <Text
-                style={[styles.importSubtitle, { color: colors.muted }]}
-              >
+              <Text style={[styles.importSubtitle, { color: colors.muted }]}>
                 Importa nuevas actividades cuando lo necesites.
               </Text>
             </View>
 
-            <Ionicons
-              name="chevron-forward"
-              size={20}
-              color={colors.subtle}
-            />
+            <Ionicons name="chevron-forward" size={20} color={colors.subtle} />
           </Pressable>
         </View>
       </Screen>
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

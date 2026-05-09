@@ -13,7 +13,7 @@ type SubjectCardProps = {
   currentUnit: number;
 };
 
-function getSubjectIcon(name: string) {
+function getSubjectIcon(name: string): keyof typeof Ionicons.glyphMap {
   const lower = name.toLowerCase();
 
   if (lower.includes("mate") || lower.includes("álgebra")) {
@@ -56,80 +56,82 @@ function SubjectCard({
     });
   }, [id]);
 
-  const iconName = useMemo(() => {
-    return getSubjectIcon(name);
-  }, [name]);
+  const iconName = useMemo(() => getSubjectIcon(name), [name]);
 
   const safeProgress = useMemo(() => {
     return Math.min(Math.max(progress, 0), 100);
   }, [progress]);
 
-  const pendingLabel = pending === 1 ? "pendiente" : "pendientes";
+  const pendingLabel = useMemo(
+    () => (pending === 1 ? "pendiente" : "pendientes"),
+    [pending]
+  );
+
+  const cardStyle = useMemo(
+    () => ({
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      shadowOpacity: isDark ? 0 : 0.05,
+    }),
+    [colors.surface, colors.border, isDark]
+  );
+
+  const softStyle = useMemo(
+    () => ({
+      backgroundColor: colors.primarySoft,
+    }),
+    [colors.primarySoft]
+  );
+
+  const progressFillStyle = useMemo(
+    () => ({
+      width: `${safeProgress}%` as `${number}%`,
+      backgroundColor: colors.primary,
+    }),
+    [safeProgress, colors.primary]
+  );
 
   return (
-    <Pressable onPress={handlePress} style={styles.pressable}>
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            shadowOpacity: isDark ? 0 : 0.05,
-          },
-        ]}
-      >
+    <Pressable
+      onPress={handlePress}
+      android_ripple={{
+        color: colors.primarySoft,
+        borderless: false,
+      }}
+      style={({ pressed }) => [
+        styles.pressable,
+        {
+          opacity: pressed ? 0.94 : 1,
+        },
+      ]}
+    >
+      <View style={[styles.card, cardStyle]}>
         <View style={styles.topRow}>
-          <View
-            style={[
-              styles.iconBox,
-              { backgroundColor: colors.primarySoft },
-            ]}
-          >
-            <Ionicons
-              name={iconName as any}
-              size={25}
-              color={colors.text}
-            />
+          <View style={[styles.iconBox, softStyle]}>
+            <Ionicons name={iconName} size={25} color={colors.text} />
           </View>
 
-          <View
-            style={[
-              styles.pendingBadge,
-              { backgroundColor: colors.primarySoft },
-            ]}
-          >
+          <View style={[styles.pendingBadge, softStyle]}>
             <Text style={[styles.pendingText, { color: colors.text }]}>
               {pending} {pendingLabel}
             </Text>
           </View>
         </View>
 
-        <Text
-          style={[styles.name, { color: colors.text }]}
-          numberOfLines={2}
-        >
+        <Text style={[styles.name, { color: colors.text }]} numberOfLines={2}>
           {name}
         </Text>
 
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
-            <Ionicons
-              name="albums-outline"
-              size={15}
-              color={colors.muted}
-            />
+            <Ionicons name="albums-outline" size={15} color={colors.muted} />
 
             <Text style={[styles.metaText, { color: colors.muted }]}>
               Unidad {currentUnit}
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.metaDot,
-              { backgroundColor: colors.border },
-            ]}
-          />
+          <View style={[styles.metaDot, { backgroundColor: colors.border }]} />
 
           <Text style={[styles.metaText, { color: colors.muted }]}>
             {safeProgress}% completado
@@ -146,44 +148,17 @@ function SubjectCard({
           </Text>
         </View>
 
-        <View
-          style={[
-            styles.progressBar,
-            { backgroundColor: colors.border },
-          ]}
-        >
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width: `${safeProgress}%`,
-                backgroundColor: colors.primary,
-              },
-            ]}
-          />
+        <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+          <View style={[styles.progressFill, progressFillStyle]} />
         </View>
 
-        <View
-          style={[
-            styles.footer,
-            { borderTopColor: colors.border },
-          ]}
-        >
+        <View style={[styles.footer, { borderTopColor: colors.border }]}>
           <Text style={[styles.footerText, { color: colors.text }]}>
             Ver actividades
           </Text>
 
-          <View
-            style={[
-              styles.arrowBox,
-              { backgroundColor: colors.primarySoft },
-            ]}
-          >
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={colors.text}
-            />
+          <View style={[styles.arrowBox, softStyle]}>
+            <Ionicons name="chevron-forward" size={18} color={colors.text} />
           </View>
         </View>
       </View>
@@ -196,6 +171,7 @@ export default memo(SubjectCard);
 const styles = StyleSheet.create({
   pressable: {
     marginBottom: 14,
+    borderRadius: 30,
   },
 
   card: {
@@ -206,6 +182,7 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 3,
+    overflow: "hidden",
   },
 
   topRow: {

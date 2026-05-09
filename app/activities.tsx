@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Text,
-  StyleSheet,
-  View,
-  Pressable,
   ActivityIndicator,
+  Pressable,
+  SectionList,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 import { useLocalSearchParams, router } from "expo-router";
@@ -17,10 +18,7 @@ import ActivityCard from "../src/components/ActivityCard";
 import { getActivities } from "@/src/services/activity.service";
 import { useAppTheme } from "@/src/hooks/useAppTheme";
 
-import {
-  spacing,
-  radius,
-} from "../src/constants/theme";
+import { spacing, radius } from "../src/constants/theme";
 
 type Activity = {
   id: string;
@@ -42,8 +40,18 @@ type PreparedActivity = Activity & {
   sortTime: number;
 };
 
+type ActivitySection = {
+  title: string;
+  dateKey: string;
+  count: number;
+  data: PreparedActivity[];
+};
+
+type Colors = ReturnType<typeof useAppTheme>["colors"];
+
 const NO_DATE_KEY = "sin-fecha";
 const NO_DATE_SORT_TIME = 9999999999999;
+const DAY_MS = 1000 * 60 * 60 * 24;
 
 function getRealStatus(activity: Activity, nowTime: number): ActivityStatus {
   if (activity.status === "completed") return "completed";
@@ -51,10 +59,10 @@ function getRealStatus(activity: Activity, nowTime: number): ActivityStatus {
 
   const dueTime = new Date(activity.due_at).getTime();
 
+  if (Number.isNaN(dueTime)) return "pending";
   if (dueTime < nowTime) return "overdue";
 
-  const diffMs = dueTime - nowTime;
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  const diffDays = (dueTime - nowTime) / DAY_MS;
 
   if (diffDays <= 3) return "pending";
 
@@ -64,7 +72,10 @@ function getRealStatus(activity: Activity, nowTime: number): ActivityStatus {
 function formatDate(date: string | null) {
   if (!date) return "Sin fecha";
 
-  return new Date(date).toLocaleDateString("es-CO", {
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) return "Sin fecha";
+
+  return parsedDate.toLocaleDateString("es-CO", {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -75,9 +86,14 @@ function formatDate(date: string | null) {
 function getDateKey(date: string | null) {
   if (!date) return NO_DATE_KEY;
 
-  const d = new Date(date);
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) return NO_DATE_KEY;
 
-  return d.toISOString().split("T")[0];
+  const year = parsedDate.getFullYear();
+  const month = `${parsedDate.getMonth() + 1}`.padStart(2, "0");
+  const day = `${parsedDate.getDate()}`.padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
 
 function formatGroupDate(dateKey: string) {
@@ -92,6 +108,78 @@ function formatGroupDate(dateKey: string) {
   });
 }
 
+function prepareSections(
+  activities: Activity[],
+  filter?: string
+): {
+  sections: ActivitySection[];
+  total: number;
+} {
+  const nowTime = Date.now();
+  const grouped = new Map<string, PreparedActivity[]>();
+
+  for (const activity of activities) {
+    const realStatus = getRealStatus(activity, nowTime);
+
+    const shouldInclude =
+      !filter ||
+      (filter === "pending" &&
+        (realStatus === "pending" ||
+          realStatus === "upcoming" ||
+          realStatus === "overdue")) ||
+      (filter === "completed" && realStatus === "completed") ||
+      (filter === "overdue" && realStatus === "overdue");
+
+    if (!shouldInclude) continue;
+
+    const sortTime = activity.due_at
+      ? new Date(activity.due_at).getTime()
+      : NO_DATE_SORT_TIME;
+
+    const prepared: PreparedActivity = {
+      ...activity,
+      realStatus,
+      dateLabel: formatDate(activity.due_at),
+      dateKey: getDateKey(activity.due_at),
+      sortTime: Number.isNaN(sortTime) ? NO_DATE_SORT_TIME : sortTime,
+    };
+
+    const current = grouped.get(prepared.dateKey) ?? [];
+    current.push(prepared);
+    grouped.set(prepared.dateKey, current);
+  }
+
+  const sections = Array.from(grouped.entries())
+    .map(([dateKey, data]) => {
+      const sortedData = [...data].sort((a, b) => a.sortTime - b.sortTime);
+
+      return {
+        title: formatGroupDate(dateKey),
+        dateKey,
+        count: sortedData.length,
+        data: sortedData,
+      };
+    })
+    .sort((a, b) => {
+      const aTime = a.data[0]?.sortTime ?? NO_DATE_SORT_TIME;
+      const bTime = b.data[0]?.sortTime ?? NO_DATE_SORT_TIME;
+
+      return aTime - bTime;
+    });
+
+  const total = sections.reduce((acc, section) => acc + section.count, 0);
+
+  return { sections, total };
+}
+
+function getTitle(filter?: string) {
+  if (filter === "pending") return "Pendientes";
+  if (filter === "completed") return "Completadas";
+  if (filter === "overdue") return "Vencidas";
+
+  return "Todas las actividades";
+}
+
 export default function ActivitiesScreen() {
   const { filter } = useLocalSearchParams<{ filter?: string }>();
   const { mode, colors } = useAppTheme();
@@ -101,97 +189,180 @@ export default function ActivitiesScreen() {
   const [loading, setLoading] = useState(true);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadActivities();
-  }, []);
-
-  async function loadActivities() {
+  const loadActivities = useCallback(async () => {
     try {
       setLoading(true);
 
       const data = await getActivities();
+
       setActivities(data ?? []);
     } catch (error) {
       console.log("Error cargando actividades:", error);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  const preparedActivities = useMemo<PreparedActivity[]>(() => {
-    const nowTime = Date.now();
+  useEffect(() => {
+    loadActivities();
+  }, [loadActivities]);
 
-    return activities.map((activity) => {
-      const realStatus = getRealStatus(activity, nowTime);
-      const sortTime = activity.due_at
-        ? new Date(activity.due_at).getTime()
-        : NO_DATE_SORT_TIME;
+  const { sections, total } = useMemo(
+    () => prepareSections(activities, filter),
+    [activities, filter]
+  );
 
-      return {
-        ...activity,
-        realStatus,
-        dateLabel: formatDate(activity.due_at),
-        dateKey: getDateKey(activity.due_at),
-        sortTime,
-      };
-    });
-  }, [activities]);
+  const title = useMemo(() => getTitle(filter), [filter]);
 
-  const filteredActivities = useMemo<PreparedActivity[]>(() => {
-    return preparedActivities
-      .filter((activity) => {
-        if (!filter) return true;
-
-        if (filter === "pending") {
-          return (
-            activity.realStatus === "pending" ||
-            activity.realStatus === "upcoming" ||
-            activity.realStatus === "overdue"
-          );
-        }
-
-        if (filter === "completed") {
-          return activity.realStatus === "completed";
-        }
-
-        if (filter === "overdue") {
-          return activity.realStatus === "overdue";
-        }
-
-        return true;
-      })
-      .sort((a, b) => a.sortTime - b.sortTime);
-  }, [preparedActivities, filter]);
-
-  const groupedActivities = useMemo(() => {
-    const groups: Record<string, PreparedActivity[]> = {};
-
-    for (const activity of filteredActivities) {
-      if (!groups[activity.dateKey]) {
-        groups[activity.dateKey] = [];
-      }
-
-      groups[activity.dateKey].push(activity);
-    }
-
-    return groups;
-  }, [filteredActivities]);
-
-  const groupKeys = useMemo(() => {
-    return Object.keys(groupedActivities);
-  }, [groupedActivities]);
-
-  const title = useMemo(() => {
-    if (filter === "pending") return "Pendientes";
-    if (filter === "completed") return "Completadas";
-    if (filter === "overdue") return "Vencidas";
-
-    return "Todas las actividades";
-  }, [filter]);
-
-  function toggleDate(dateKey: string) {
+  const toggleDate = useCallback((dateKey: string) => {
     setExpandedDate((current) => (current === dateKey ? null : dateKey));
-  }
+  }, []);
+
+  const handleGoBack = useCallback(() => {
+    router.back();
+  }, []);
+
+  const handleFilterAll = useCallback(() => {
+    router.replace("/activities");
+  }, []);
+
+  const handleFilterPending = useCallback(() => {
+    router.replace("/activities?filter=pending");
+  }, []);
+
+  const handleFilterCompleted = useCallback(() => {
+    router.replace("/activities?filter=completed");
+  }, []);
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: ActivitySection }) => (
+      <AccordionHeader
+        section={section}
+        colors={colors}
+        isDark={isDark}
+        expanded={expandedDate === section.dateKey}
+        onToggle={toggleDate}
+      />
+    ),
+    [colors, isDark, expandedDate, toggleDate]
+  );
+
+  const renderItem = useCallback(
+    ({ item, section }: { item: PreparedActivity; section: ActivitySection }) => {
+      if (expandedDate !== section.dateKey) return null;
+
+      return (
+        <View style={styles.accordionItemWrapper}>
+          <ActivityCard
+            id={item.id}
+            title={item.title}
+            subject={item.type || "Calendario académico"}
+            date={item.dateLabel}
+            status={item.realStatus}
+          />
+        </View>
+      );
+    },
+    [expandedDate]
+  );
+
+  const ListHeader = useMemo(
+    () => (
+      <>
+        <View style={styles.header}>
+          <Pressable
+            style={[
+              styles.backButton,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                shadowOpacity: isDark ? 0 : 0.08,
+              },
+            ]}
+            onPress={handleGoBack}
+          >
+            <Ionicons name="arrow-back" size={22} color={colors.text} />
+          </Pressable>
+
+          <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+
+          <Text style={[styles.subtitle, { color: colors.muted }]}>
+            {total} actividades encontradas
+          </Text>
+        </View>
+
+        <View style={styles.filters}>
+          <FilterButton
+            label="Todas"
+            active={!filter}
+            colors={colors}
+            onPress={handleFilterAll}
+          />
+
+          <FilterButton
+            label="Pendientes"
+            active={filter === "pending"}
+            colors={colors}
+            onPress={handleFilterPending}
+          />
+
+          <FilterButton
+            label="Completadas"
+            active={filter === "completed"}
+            colors={colors}
+            onPress={handleFilterCompleted}
+          />
+        </View>
+      </>
+    ),
+    [
+      colors,
+      isDark,
+      title,
+      total,
+      filter,
+      handleGoBack,
+      handleFilterAll,
+      handleFilterPending,
+      handleFilterCompleted,
+    ]
+  );
+
+  const ListEmpty = useMemo(
+    () => (
+      <View
+        style={[
+          styles.emptyCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            shadowOpacity: isDark ? 0 : 0.08,
+          },
+        ]}
+      >
+        <View style={[styles.emptyIcon, { backgroundColor: colors.primarySoft }]}>
+          <Ionicons name="calendar-outline" size={34} color={colors.primary} />
+        </View>
+
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>
+          No hay actividades
+        </Text>
+
+        <Text style={[styles.emptyText, { color: colors.muted }]}>
+          Cuando importes o completes actividades, aparecerán aquí.
+        </Text>
+      </View>
+    ),
+    [
+      colors.surface,
+      colors.border,
+      colors.primarySoft,
+      colors.primary,
+      colors.text,
+      colors.muted,
+      isDark,
+    ]
+  );
 
   if (loading) {
     return (
@@ -216,6 +387,7 @@ export default function ActivitiesScreen() {
 
   return (
     <Screen
+      scroll={false}
       contentStyle={[
         styles.screenContent,
         { backgroundColor: colors.background },
@@ -223,219 +395,127 @@ export default function ActivitiesScreen() {
     >
       <StatusBar style={isDark ? "light" : "dark"} translucent />
 
-      <View style={styles.header}>
-        <Pressable
-          style={[
-            styles.backButton,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              shadowOpacity: isDark ? 0 : 0.08,
-            },
-          ]}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={22} color={colors.text} />
-        </Pressable>
-
-        <Text style={[styles.title, { color: colors.text }]}>
-          {title}
-        </Text>
-
-        <Text style={[styles.subtitle, { color: colors.muted }]}>
-          {filteredActivities.length} actividades encontradas
-        </Text>
-      </View>
-
-      <View style={styles.filters}>
-        <Pressable
-          style={[
-            styles.filterButton,
-            {
-              backgroundColor: !filter
-                ? colors.primary
-                : colors.surface,
-              borderColor: !filter
-                ? colors.primary
-                : colors.border,
-            },
-          ]}
-          onPress={() => router.replace("/activities")}
-        >
-          <Text
-            style={[
-              styles.filterText,
-              { color: !filter ? "#11120F" : colors.muted },
-            ]}
-          >
-            Todas
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[
-            styles.filterButton,
-            {
-              backgroundColor:
-                filter === "pending" ? colors.primary : colors.surface,
-              borderColor:
-                filter === "pending" ? colors.primary : colors.border,
-            },
-          ]}
-          onPress={() => router.replace("/activities?filter=pending")}
-        >
-          <Text
-            style={[
-              styles.filterText,
-              {
-                color:
-                  filter === "pending" ? "#11120F" : colors.muted,
-              },
-            ]}
-          >
-            Pendientes
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[
-            styles.filterButton,
-            {
-              backgroundColor:
-                filter === "completed" ? colors.primary : colors.surface,
-              borderColor:
-                filter === "completed" ? colors.primary : colors.border,
-            },
-          ]}
-          onPress={() => router.replace("/activities?filter=completed")}
-        >
-          <Text
-            style={[
-              styles.filterText,
-              {
-                color:
-                  filter === "completed" ? "#11120F" : colors.muted,
-              },
-            ]}
-          >
-            Completadas
-          </Text>
-        </Pressable>
-      </View>
-
-      {groupKeys.length === 0 ? (
-        <View
-          style={[
-            styles.emptyCard,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              shadowOpacity: isDark ? 0 : 0.08,
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.emptyIcon,
-              { backgroundColor: colors.primarySoft },
-            ]}
-          >
-            <Ionicons
-              name="calendar-outline"
-              size={34}
-              color={colors.primary}
-            />
-          </View>
-
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            No hay actividades
-          </Text>
-
-          <Text style={[styles.emptyText, { color: colors.muted }]}>
-            Cuando importes o completes actividades, aparecerán aquí.
-          </Text>
-        </View>
-      ) : (
-        groupKeys.map((dateKey) => {
-          const isExpanded = expandedDate === dateKey;
-          const group = groupedActivities[dateKey];
-
-          return (
-            <View
-              key={dateKey}
-              style={[
-                styles.accordionCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  shadowOpacity: isDark ? 0 : 0.08,
-                },
-              ]}
-            >
-              <Pressable
-                style={styles.accordionHeader}
-                onPress={() => toggleDate(dateKey)}
-              >
-                <View>
-                  <Text
-                    style={[
-                      styles.accordionDate,
-                      { color: colors.text },
-                    ]}
-                  >
-                    {formatGroupDate(dateKey)}
-                  </Text>
-
-                  <Text
-                    style={[
-                      styles.accordionMeta,
-                      { color: colors.muted },
-                    ]}
-                  >
-                    {group.length} actividad{group.length === 1 ? "" : "es"}
-                  </Text>
-                </View>
-
-                <Ionicons
-                  name={isExpanded ? "chevron-up" : "chevron-down"}
-                  size={22}
-                  color={colors.subtle}
-                />
-              </Pressable>
-
-              {isExpanded && (
-                <View
-                  style={[
-                    styles.accordionContent,
-                    { borderTopColor: colors.border },
-                  ]}
-                >
-                  {group.map((activity) => (
-                    <ActivityCard
-                      key={activity.id}
-                      id={activity.id}
-                      title={activity.title}
-                      subject={activity.type || "Calendario académico"}
-                      date={activity.dateLabel}
-                      status={activity.realStatus}
-                    />
-                  ))}
-                </View>
-              )}
-            </View>
-          );
-        })
-      )}
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={ListEmpty}
+        stickySectionHeadersEnabled={false}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews={false}
+        contentContainerStyle={styles.listContent}
+      />
     </Screen>
   );
 }
 
+const FilterButton = memo(function FilterButton({
+  label,
+  active,
+  colors,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  colors: Colors;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={[
+        styles.filterButton,
+        {
+          backgroundColor: active ? colors.primary : colors.surface,
+          borderColor: active ? colors.primary : colors.border,
+        },
+      ]}
+      onPress={onPress}
+    >
+      <Text
+        style={[
+          styles.filterText,
+          { color: active ? "#11120F" : colors.muted },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+});
+
+const AccordionHeader = memo(function AccordionHeader({
+  section,
+  colors,
+  isDark,
+  expanded,
+  onToggle,
+}: {
+  section: ActivitySection;
+  colors: Colors;
+  isDark: boolean;
+  expanded: boolean;
+  onToggle: (dateKey: string) => void;
+}) {
+  const handlePress = useCallback(() => {
+    onToggle(section.dateKey);
+  }, [section.dateKey, onToggle]);
+
+  return (
+    <View
+      style={[
+        styles.accordionCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          shadowOpacity: isDark ? 0 : 0.08,
+        },
+      ]}
+    >
+      <Pressable style={styles.accordionHeader} onPress={handlePress}>
+        <View>
+          <Text style={[styles.accordionDate, { color: colors.text }]}>
+            {section.title}
+          </Text>
+
+          <Text style={[styles.accordionMeta, { color: colors.muted }]}>
+            {section.count} actividad{section.count === 1 ? "" : "es"}
+          </Text>
+        </View>
+
+        <Ionicons
+          name={expanded ? "chevron-up" : "chevron-down"}
+          size={22}
+          color={colors.subtle}
+        />
+      </Pressable>
+
+      {expanded && (
+        <View
+          style={[
+            styles.accordionContent,
+            { borderTopColor: colors.border },
+          ]}
+        />
+      )}
+    </View>
+  );
+});
+
 const styles = StyleSheet.create({
   screenContent: {
-    flexGrow: 1,
+    flex: 1,
     paddingTop: 44,
     paddingHorizontal: 24,
     paddingBottom: 120,
+  },
+
+  listContent: {
+    paddingBottom: 12,
   },
 
   center: {
@@ -531,6 +611,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingTop: spacing.md,
     borderTopWidth: 1,
+  },
+
+  accordionItemWrapper: {
+    marginTop: -12,
+    marginBottom: 12,
   },
 
   emptyCard: {

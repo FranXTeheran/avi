@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -30,6 +30,16 @@ type Activity = {
   subject_code?: string | null;
 };
 
+type Colors = ReturnType<typeof useAppTheme>["colors"];
+
+type UnitGroup = {
+  title: string;
+  activities: Activity[];
+  pending: number;
+};
+
+const FALLBACK_TIME = 9999999999999;
+
 function createSubjectId(name: string) {
   return name
     .toLowerCase()
@@ -39,16 +49,19 @@ function createSubjectId(name: string) {
 }
 
 function getSubjectName(activity: Activity) {
-  if (activity.subject_name?.trim()) return activity.subject_name.trim();
-  if (activity.subject_code?.trim()) return activity.subject_code.trim();
+  const subjectName = activity.subject_name?.trim();
+  const subjectCode = activity.subject_code?.trim();
 
-  return "Materia sin clasificar";
+  return subjectName || subjectCode || "Materia sin clasificar";
 }
 
 function formatDate(value: string | null) {
   if (!value) return "Sin fecha";
 
-  return new Date(value).toLocaleDateString("es-CO", {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sin fecha";
+
+  return date.toLocaleDateString("es-CO", {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -56,16 +69,21 @@ function formatDate(value: string | null) {
   });
 }
 
-function getActivityTone(
-  status: string,
-  isDark: boolean,
-  colors: any
-) {
+function getDueTime(value: string | null) {
+  if (!value) return FALLBACK_TIME;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return FALLBACK_TIME;
+
+  return date.getTime();
+}
+
+function getActivityTone(status: string, isDark: boolean, colors: Colors) {
   if (status === "completed") {
     return {
       color: colors.success,
       soft: colors.successSoft,
-      icon: "checkmark-circle-outline",
+      icon: "checkmark-circle-outline" as const,
     };
   }
 
@@ -73,7 +91,7 @@ function getActivityTone(
     return {
       color: colors.danger,
       soft: colors.dangerSoft,
-      icon: "alert-circle-outline",
+      icon: "alert-circle-outline" as const,
     };
   }
 
@@ -81,14 +99,14 @@ function getActivityTone(
     return {
       color: isDark ? "#7DB7FF" : "#2F80ED",
       soft: isDark ? "#172A42" : "#EAF3FF",
-      icon: "time-outline",
+      icon: "time-outline" as const,
     };
   }
 
   return {
     color: colors.primary,
     soft: colors.primarySoft,
-    icon: "document-text-outline",
+    icon: "document-text-outline" as const,
   };
 }
 
@@ -96,11 +114,11 @@ function getSubjectIcon(name: string) {
   const lower = name.toLowerCase();
 
   if (lower.includes("mate") || lower.includes("álgebra")) {
-    return "calculator-outline";
+    return "calculator-outline" as const;
   }
 
   if (lower.includes("program") || lower.includes("software")) {
-    return "code-slash-outline";
+    return "code-slash-outline" as const;
   }
 
   if (
@@ -108,14 +126,99 @@ function getSubjectIcon(name: string) {
     lower.includes("fisica") ||
     lower.includes("física")
   ) {
-    return "flask-outline";
+    return "flask-outline" as const;
   }
 
   if (lower.includes("inglés") || lower.includes("idioma")) {
-    return "language-outline";
+    return "language-outline" as const;
   }
 
-  return "book-outline";
+  return "book-outline" as const;
+}
+
+function buildSubjectSummary(activities: Activity[], subjectId?: string) {
+  const subjectActivities: Activity[] = [];
+
+  for (const activity of activities) {
+    const name = getSubjectName(activity);
+
+    if (createSubjectId(name) === subjectId) {
+      subjectActivities.push(activity);
+    }
+  }
+
+  if (subjectActivities.length === 0) {
+    return {
+      subjectActivities,
+      subjectName: "Materia",
+      completed: 0,
+      pending: 0,
+      progress: 0,
+      safeProgress: 0,
+      units: [] as UnitGroup[],
+    };
+  }
+
+  const subjectName = getSubjectName(subjectActivities[0]);
+  const grouped = new Map<string, Activity[]>();
+
+  let completed = 0;
+  let pending = 0;
+
+  for (const activity of subjectActivities) {
+    if (activity.status === "completed") {
+      completed += 1;
+    } else {
+      pending += 1;
+    }
+
+    const unitLabel = activity.unit_number
+      ? `Unidad ${activity.unit_number}`
+      : "Sin unidad";
+
+    const current = grouped.get(unitLabel) ?? [];
+    current.push(activity);
+    grouped.set(unitLabel, current);
+  }
+
+  const units: UnitGroup[] = Array.from(grouped.entries()).map(
+    ([title, unitActivities]) => {
+      const sortedActivities = [...unitActivities].sort(
+        (a, b) => getDueTime(a.due_at) - getDueTime(b.due_at)
+      );
+
+      let unitPending = 0;
+
+      for (const activity of sortedActivities) {
+        if (activity.status !== "completed") {
+          unitPending += 1;
+        }
+      }
+
+      return {
+        title,
+        activities: sortedActivities,
+        pending: unitPending,
+      };
+    }
+  );
+
+  const progress =
+    subjectActivities.length === 0
+      ? 0
+      : Math.round((completed / subjectActivities.length) * 100);
+
+  const safeProgress = Math.min(Math.max(progress, 0), 100);
+
+  return {
+    subjectActivities,
+    subjectName,
+    completed,
+    pending,
+    progress,
+    safeProgress,
+    units,
+  };
 }
 
 export default function SubjectDetailScreen() {
@@ -128,11 +231,7 @@ export default function SubjectDetailScreen() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadActivities();
-  }, []);
-
-  async function loadActivities() {
+  const loadActivities = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -144,63 +243,33 @@ export default function SubjectDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  const subjectActivities = useMemo(() => {
-    return activities.filter((activity) => {
-      const name = getSubjectName(activity);
-      return createSubjectId(name) === subjectId;
-    });
-  }, [activities, subjectId]);
+  useEffect(() => {
+    loadActivities();
+  }, [loadActivities]);
 
-  const subjectName = subjectActivities.length
-    ? getSubjectName(subjectActivities[0])
-    : "Materia";
+  const {
+    subjectActivities,
+    subjectName,
+    completed,
+    pending,
+    safeProgress,
+    units,
+  } = useMemo(
+    () => buildSubjectSummary(activities, subjectId),
+    [activities, subjectId]
+  );
 
-  const completed = subjectActivities.filter(
-    (activity) => activity.status === "completed"
-  ).length;
+  const subjectIcon = useMemo(() => getSubjectIcon(subjectName), [subjectName]);
 
-  const pending = subjectActivities.filter(
-    (activity) => activity.status !== "completed"
-  ).length;
+  const handleGoBack = useCallback(() => {
+    router.back();
+  }, []);
 
-  const progress =
-    subjectActivities.length === 0
-      ? 0
-      : Math.round((completed / subjectActivities.length) * 100);
-
-  const safeProgress = Math.min(Math.max(progress, 0), 100);
-
-  const units = useMemo(() => {
-    const grouped = subjectActivities.reduce<Record<string, Activity[]>>(
-      (acc, activity) => {
-        const unitLabel = activity.unit_number
-          ? `Unidad ${activity.unit_number}`
-          : "Sin unidad";
-
-        if (!acc[unitLabel]) acc[unitLabel] = [];
-
-        acc[unitLabel].push(activity);
-
-        return acc;
-      },
-      {}
-    );
-
-    return Object.entries(grouped).map(([title, unitActivities]) => ({
-      title,
-      activities: unitActivities.sort((a, b) => {
-        return (
-          new Date(a.due_at || "").getTime() -
-          new Date(b.due_at || "").getTime()
-        );
-      }),
-      pending: unitActivities.filter(
-        (activity) => activity.status !== "completed"
-      ).length,
-    }));
-  }, [subjectActivities]);
+  const handleOpenActivity = useCallback((activityId: string) => {
+    router.push(`/activity/${activityId}`);
+  }, []);
 
   if (loading) {
     return (
@@ -253,7 +322,7 @@ export default function SubjectDetailScreen() {
 
           <Pressable
             style={[styles.backLargeButton, { backgroundColor: colors.primary }]}
-            onPress={() => router.back()}
+            onPress={handleGoBack}
           >
             <Text style={[styles.backLargeButtonText, { color: "#11120F" }]}>
               Volver
@@ -283,7 +352,7 @@ export default function SubjectDetailScreen() {
               shadowOpacity: isDark ? 0 : 0.08,
             },
           ]}
-          onPress={() => router.back()}
+          onPress={handleGoBack}
         >
           <Ionicons name="arrow-back" size={22} color={colors.text} />
         </Pressable>
@@ -304,25 +373,11 @@ export default function SubjectDetailScreen() {
         ]}
       >
         <View style={styles.heroTop}>
-          <View
-            style={[
-              styles.iconBox,
-              { backgroundColor: colors.primarySoft },
-            ]}
-          >
-            <Ionicons
-              name={getSubjectIcon(subjectName) as any}
-              size={30}
-              color={colors.text}
-            />
+          <View style={[styles.iconBox, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons name={subjectIcon} size={30} color={colors.text} />
           </View>
 
-          <View
-            style={[
-              styles.pendingBadge,
-              { backgroundColor: colors.primarySoft },
-            ]}
-          >
+          <View style={[styles.pendingBadge, { backgroundColor: colors.primarySoft }]}>
             <Text style={[styles.pendingBadgeText, { color: colors.text }]}>
               {pending} pendientes
             </Text>
@@ -364,12 +419,7 @@ export default function SubjectDetailScreen() {
           </Text>
         </View>
 
-        <View
-          style={[
-            styles.progressBar,
-            { backgroundColor: colors.border },
-          ]}
-        >
+        <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
           <View
             style={[
               styles.progressFill,
@@ -392,12 +442,7 @@ export default function SubjectDetailScreen() {
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.statDivider,
-              { backgroundColor: colors.border },
-            ]}
-          />
+          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
 
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: colors.text }]}>
@@ -409,12 +454,7 @@ export default function SubjectDetailScreen() {
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.statDivider,
-              { backgroundColor: colors.border },
-            ]}
-          />
+          <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
 
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: colors.text }]}>
@@ -439,109 +479,134 @@ export default function SubjectDetailScreen() {
       </View>
 
       {units.map((unit) => (
-        <View
+        <UnitCard
           key={unit.title}
-          style={[
-            styles.unitCard,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              shadowOpacity: isDark ? 0 : 0.06,
-            },
-          ]}
-        >
-          <View style={styles.unitHeader}>
-            <View>
-              <Text style={[styles.unitTitle, { color: colors.text }]}>
-                {unit.title}
-              </Text>
-
-              <Text style={[styles.unitMeta, { color: colors.muted }]}>
-                {unit.activities.length} actividad
-                {unit.activities.length === 1 ? "" : "es"}
-              </Text>
-            </View>
-
-            <View
-              style={[
-                styles.unitBadge,
-                { backgroundColor: colors.primarySoft },
-              ]}
-            >
-              <Text style={[styles.unitBadgeText, { color: colors.text }]}>
-                {unit.pending} pendientes
-              </Text>
-            </View>
-          </View>
-
-          {unit.activities.map((activity) => {
-            const tone = getActivityTone(activity.status, isDark, colors);
-
-            return (
-              <Pressable
-                key={activity.id}
-                style={[
-                  styles.activityRow,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-                onPress={() => router.push(`/activity/${activity.id}`)}
-              >
-                <View
-                  style={[
-                    styles.activityAccent,
-                    { backgroundColor: tone.color },
-                  ]}
-                />
-
-                <View
-                  style={[
-                    styles.activityIcon,
-                    { backgroundColor: tone.soft },
-                  ]}
-                >
-                  <Ionicons
-                    name={tone.icon as any}
-                    size={20}
-                    color={tone.color}
-                  />
-                </View>
-
-                <View style={styles.activityContent}>
-                  <Text
-                    style={[styles.activityTitle, { color: colors.text }]}
-                    numberOfLines={2}
-                  >
-                    {activity.title}
-                  </Text>
-
-                  <Text style={[styles.activityDate, { color: colors.muted }]}>
-                    {formatDate(activity.due_at)}
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.activityArrow,
-                    { backgroundColor: colors.primarySoft },
-                  ]}
-                >
-                  <Ionicons
-                    name="chevron-forward"
-                    size={17}
-                    color={colors.text}
-                  />
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
+          unit={unit}
+          colors={colors}
+          isDark={isDark}
+          onOpenActivity={handleOpenActivity}
+        />
       ))}
     </Screen>
   );
 }
+
+const UnitCard = memo(function UnitCard({
+  unit,
+  colors,
+  isDark,
+  onOpenActivity,
+}: {
+  unit: UnitGroup;
+  colors: Colors;
+  isDark: boolean;
+  onOpenActivity: (activityId: string) => void;
+}) {
+  return (
+    <View
+      style={[
+        styles.unitCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          shadowOpacity: isDark ? 0 : 0.06,
+        },
+      ]}
+    >
+      <View style={styles.unitHeader}>
+        <View>
+          <Text style={[styles.unitTitle, { color: colors.text }]}>
+            {unit.title}
+          </Text>
+
+          <Text style={[styles.unitMeta, { color: colors.muted }]}>
+            {unit.activities.length} actividad
+            {unit.activities.length === 1 ? "" : "es"}
+          </Text>
+        </View>
+
+        <View style={[styles.unitBadge, { backgroundColor: colors.primarySoft }]}>
+          <Text style={[styles.unitBadgeText, { color: colors.text }]}>
+            {unit.pending} pendientes
+          </Text>
+        </View>
+      </View>
+
+      {unit.activities.map((activity) => (
+        <ActivityRow
+          key={activity.id}
+          activity={activity}
+          colors={colors}
+          isDark={isDark}
+          onOpenActivity={onOpenActivity}
+        />
+      ))}
+    </View>
+  );
+});
+
+const ActivityRow = memo(function ActivityRow({
+  activity,
+  colors,
+  isDark,
+  onOpenActivity,
+}: {
+  activity: Activity;
+  colors: Colors;
+  isDark: boolean;
+  onOpenActivity: (activityId: string) => void;
+}) {
+  const tone = useMemo(
+    () => getActivityTone(activity.status, isDark, colors),
+    [activity.status, isDark, colors]
+  );
+
+  const formattedDate = useMemo(
+    () => formatDate(activity.due_at),
+    [activity.due_at]
+  );
+
+  const handlePress = useCallback(() => {
+    onOpenActivity(activity.id);
+  }, [activity.id, onOpenActivity]);
+
+  return (
+    <Pressable
+      style={[
+        styles.activityRow,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+        },
+      ]}
+      onPress={handlePress}
+    >
+      <View style={[styles.activityAccent, { backgroundColor: tone.color }]} />
+
+      <View style={[styles.activityIcon, { backgroundColor: tone.soft }]}>
+        <Ionicons name={tone.icon} size={20} color={tone.color} />
+      </View>
+
+      <View style={styles.activityContent}>
+        <Text
+          style={[styles.activityTitle, { color: colors.text }]}
+          numberOfLines={2}
+        >
+          {activity.title}
+        </Text>
+
+        <Text style={[styles.activityDate, { color: colors.muted }]}>
+          {formattedDate}
+        </Text>
+      </View>
+
+      <View style={[styles.activityArrow, { backgroundColor: colors.primarySoft }]}>
+        <Ionicons name="chevron-forward" size={17} color={colors.text} />
+      </View>
+    </Pressable>
+  );
+});
+
 
 const styles = StyleSheet.create({
   screenContent: {

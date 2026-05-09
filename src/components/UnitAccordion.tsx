@@ -1,19 +1,10 @@
-import { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-} from "react-native";
+import { memo, useCallback, useMemo, useState } from "react";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
-import {
-  colors,
-  radius,
-  spacing,
-  shadow,
-} from "../constants/theme";
+import { radius, spacing } from "../constants/theme";
+import { useAppTheme } from "../hooks/useAppTheme";
 
 type Activity = {
   id: string;
@@ -29,49 +20,75 @@ type UnitAccordionProps = {
   activities: Activity[];
 };
 
-export default function UnitAccordion({
+type Colors = ReturnType<typeof useAppTheme>["colors"];
+
+function UnitAccordion({
   title,
   pending,
   activities,
 }: UnitAccordionProps) {
+  const { mode, colors } = useAppTheme();
+  const isDark = mode === "dark";
+
   const [open, setOpen] = useState(false);
 
   const isCompleted = pending === 0;
 
-  const goToActivity = (id: string) => {
+  const handleToggle = useCallback(() => {
+    setOpen((current) => !current);
+  }, []);
+
+  const handleOpenActivity = useCallback((id: string) => {
     router.push({
       pathname: "/activity/[id]",
       params: { id },
     });
-  };
+  }, []);
+
+  const wrapperStyle = useMemo(
+    () => ({
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      shadowOpacity: isDark ? 0 : 0.06,
+    }),
+    [colors.surface, colors.border, isDark]
+  );
+
+  const iconStyle = useMemo(
+    () => ({
+      backgroundColor: isCompleted ? colors.successSoft : colors.primarySoft,
+    }),
+    [isCompleted, colors.successSoft, colors.primarySoft]
+  );
+
+  const iconColor = isCompleted ? colors.success : colors.primary;
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, wrapperStyle]}>
       <Pressable
         style={styles.header}
-        onPress={() => setOpen(!open)}
+        onPress={handleToggle}
+        android_ripple={{
+          color: colors.primarySoft,
+          borderless: false,
+        }}
       >
         <View style={styles.left}>
-          <View
-            style={[
-              styles.iconBox,
-              isCompleted && styles.completedIcon,
-            ]}
-          >
+          <View style={[styles.iconBox, iconStyle]}>
             <Ionicons
               name={isCompleted ? "checkmark" : "book"}
               size={18}
-              color={isCompleted ? "#10B981" : colors.primary}
+              color={iconColor}
             />
           </View>
 
-          <View>
-            <Text style={styles.title}>{title}</Text>
+          <View style={styles.titleBox}>
+            <Text style={[styles.title, { color: colors.text }]}>
+              {title}
+            </Text>
 
-            <Text style={styles.meta}>
-              {pending > 0
-                ? `${pending} pendientes`
-                : "Sin pendientes"}
+            <Text style={[styles.meta, { color: colors.muted }]}>
+              {pending > 0 ? `${pending} pendientes` : "Sin pendientes"}
             </Text>
           </View>
         </View>
@@ -87,35 +104,21 @@ export default function UnitAccordion({
         <View style={styles.content}>
           {activities.length > 0 ? (
             activities.map((activity) => (
-              <Pressable
+              <ActivityRow
                 key={activity.id}
-                style={styles.activityRow}
-                onPress={() => goToActivity(activity.id)}
-              >
-                <View style={styles.activityLeft}>
-                  <View style={styles.dot} />
-
-                  <View style={styles.activityText}>
-                    <Text style={styles.activityTitle}>
-                      {activity.title}
-                    </Text>
-
-                    <Text style={styles.activityMeta}>
-                      {activity.date}
-                    </Text>
-                  </View>
-                </View>
-
-                <Ionicons
-                  name="arrow-forward"
-                  size={16}
-                  color={colors.subtle}
-                />
-              </Pressable>
+                activity={activity}
+                colors={colors}
+                onOpenActivity={handleOpenActivity}
+              />
             ))
           ) : (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>
+            <View
+              style={[
+                styles.emptyBox,
+                { backgroundColor: colors.surfaceSoft },
+              ]}
+            >
+              <Text style={[styles.emptyText, { color: colors.muted }]}>
                 No hay actividades en esta unidad.
               </Text>
             </View>
@@ -126,13 +129,76 @@ export default function UnitAccordion({
   );
 }
 
+const ActivityRow = memo(function ActivityRow({
+  activity,
+  colors,
+  onOpenActivity,
+}: {
+  activity: Activity;
+  colors: Colors;
+  onOpenActivity: (id: string) => void;
+}) {
+  const handlePress = useCallback(() => {
+    onOpenActivity(activity.id);
+  }, [activity.id, onOpenActivity]);
+
+  const dotColor = useMemo(() => {
+    if (activity.status === "completed") return colors.success;
+    if (activity.status === "overdue") return colors.danger;
+    if (activity.status === "upcoming") return colors.primary;
+
+    return colors.primary;
+  }, [activity.status, colors.success, colors.danger, colors.primary]);
+
+  return (
+    <Pressable
+      style={[
+        styles.activityRow,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+        },
+      ]}
+      onPress={handlePress}
+      android_ripple={{
+        color: colors.primarySoft,
+        borderless: false,
+      }}
+    >
+      <View style={styles.activityLeft}>
+        <View style={[styles.dot, { backgroundColor: dotColor }]} />
+
+        <View style={styles.activityText}>
+          <Text
+            style={[styles.activityTitle, { color: colors.text }]}
+            numberOfLines={2}
+          >
+            {activity.title}
+          </Text>
+
+          <Text style={[styles.activityMeta, { color: colors.muted }]}>
+            {activity.date}
+          </Text>
+        </View>
+      </View>
+
+      <Ionicons name="arrow-forward" size={16} color={colors.subtle} />
+    </Pressable>
+  );
+});
+
+export default memo(UnitAccordion);
+
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: colors.surface,
     borderRadius: 30,
+    borderWidth: 1,
     marginBottom: spacing.md,
     overflow: "hidden",
-    ...shadow.card,
+    shadowColor: "#000000",
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
   },
 
   header: {
@@ -148,31 +214,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  titleBox: {
+    flex: 1,
+  },
+
   iconBox: {
     width: 46,
     height: 46,
     borderRadius: radius.full,
-    backgroundColor: colors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
     marginRight: spacing.md,
   },
 
-  completedIcon: {
-    backgroundColor: colors.successSoft,
-  },
-
   title: {
     fontSize: 18,
     fontWeight: "900",
-    color: colors.text,
     letterSpacing: -0.4,
   },
 
   meta: {
     fontSize: 14,
     fontWeight: "600",
-    color: colors.muted,
     marginTop: spacing.xs,
   },
 
@@ -182,10 +245,8 @@ const styles = StyleSheet.create({
   },
 
   activityRow: {
-    backgroundColor: "#FFFFFF",
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
     marginTop: spacing.sm,
     flexDirection: "row",
@@ -203,7 +264,6 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: radius.full,
-    backgroundColor: colors.primary,
     marginRight: spacing.md,
   },
 
@@ -214,25 +274,21 @@ const styles = StyleSheet.create({
   activityTitle: {
     fontSize: 15,
     fontWeight: "800",
-    color: colors.text,
   },
 
   activityMeta: {
     fontSize: 13,
     fontWeight: "600",
-    color: colors.muted,
     marginTop: spacing.xs,
   },
 
   emptyBox: {
-    backgroundColor: colors.surfaceSoft,
     borderRadius: radius.lg,
     padding: spacing.md,
     marginTop: spacing.sm,
   },
 
   emptyText: {
-    color: colors.muted,
     fontSize: 14,
     fontWeight: "600",
   },

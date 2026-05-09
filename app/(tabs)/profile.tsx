@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -18,19 +18,22 @@ import { signOut } from "@/src/services/auth.service";
 import { supabase } from "@/src/lib/supabase";
 import { useAppTheme } from "@/src/hooks/useAppTheme";
 
+type Colors = ReturnType<typeof useAppTheme>["colors"];
+
 export default function ProfileScreen() {
   const [fullName, setFullName] = useState("Estudiante");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const { mode, toggleTheme, colors } = useAppTheme();
   const isDark = mode === "dark";
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  const avatarLetter = useMemo(() => {
+    return fullName.trim().charAt(0).toUpperCase() || "E";
+  }, [fullName]);
 
-  async function loadProfile() {
+  const loadProfile = useCallback(async () => {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const user = sessionData.session?.user;
@@ -53,19 +56,48 @@ export default function ProfileScreen() {
       if (data?.full_name) {
         setFullName(data.full_name);
       }
+    } catch (error) {
+      console.log("Error cargando perfil:", error);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function handleLogout() {
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  const handleLogout = useCallback(async () => {
+    if (loggingOut) return;
+
     try {
+      setLoggingOut(true);
       await signOut();
       router.replace("/(auth)/login");
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Alert.alert("Error", error?.message ?? "No pudimos cerrar sesión.");
+      setLoggingOut(false);
     }
-  }
+  }, [loggingOut]);
+
+  const handleGoNotifications = useCallback(() => {
+    router.push("/notifications" as any);
+  }, []);
+
+  const handleGoImportCalendar = useCallback(() => {
+    router.push("/(onboarding)/import-calendar" as any);
+  }, []);
+
+  const themeOption = useMemo(
+    () => ({
+      icon: (isDark ? "sun" : "moon") as keyof typeof Feather.glyphMap,
+      title: isDark ? "Modo claro" : "Modo oscuro",
+      subtitle: isDark
+        ? "Volver a una interfaz clara y luminosa."
+        : "Usar una interfaz más suave para estudiar de noche.",
+    }),
+    [isDark]
+  );
 
   if (loading) {
     return (
@@ -105,9 +137,7 @@ export default function ProfileScreen() {
       >
         <View style={styles.header}>
           <View>
-            <Text style={[styles.logo, { color: colors.primary }]}>
-              PERFIL
-            </Text>
+            <Text style={[styles.logo, { color: colors.primary }]}>PERFIL</Text>
 
             <Text style={[styles.title, { color: colors.text }]}>
               Tu espacio en AVI
@@ -140,38 +170,24 @@ export default function ProfileScreen() {
             },
           ]}
         >
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: colors.primarySoft },
-            ]}
-          >
+          <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
             <Text style={[styles.avatarText, { color: colors.text }]}>
-              {fullName.charAt(0).toUpperCase()}
+              {avatarLetter}
             </Text>
           </View>
 
-          <Text
-            style={[styles.name, { color: colors.text }]}
-            numberOfLines={2}
-          >
+          <Text style={[styles.name, { color: colors.text }]} numberOfLines={2}>
             {fullName}
           </Text>
 
           {!!email && (
-            <Text
-              style={[styles.email, { color: colors.muted }]}
-              numberOfLines={1}
-            >
+            <Text style={[styles.email, { color: colors.muted }]} numberOfLines={1}>
               {email}
             </Text>
           )}
 
           <View
-            style={[
-              styles.profileBadge,
-              { backgroundColor: colors.primarySoft },
-            ]}
+            style={[styles.profileBadge, { backgroundColor: colors.primarySoft }]}
           >
             <Feather name="check-circle" size={15} color={colors.text} />
 
@@ -208,7 +224,7 @@ export default function ProfileScreen() {
             title="Notificaciones"
             subtitle="Sonido, vibración y recordatorios suaves."
             colors={colors}
-            onPress={() => router.push("/notifications" as any)}
+            onPress={handleGoNotifications}
           />
 
           <ProfileOption
@@ -216,17 +232,13 @@ export default function ProfileScreen() {
             title="Calendario académico"
             subtitle="Actualiza o vuelve a importar tu calendario."
             colors={colors}
-            onPress={() => router.push("/(onboarding)/import-calendar" as any)}
+            onPress={handleGoImportCalendar}
           />
 
           <ProfileOption
-            icon={isDark ? "sun" : "moon"}
-            title={isDark ? "Modo claro" : "Modo oscuro"}
-            subtitle={
-              isDark
-                ? "Volver a una interfaz clara y luminosa."
-                : "Usar una interfaz más suave para estudiar de noche."
-            }
+            icon={themeOption.icon}
+            title={themeOption.title}
+            subtitle={themeOption.subtitle}
             colors={colors}
             onPress={toggleTheme}
           />
@@ -238,10 +250,12 @@ export default function ProfileScreen() {
             {
               backgroundColor: colors.surface,
               borderColor: isDark ? "#4A2028" : "#FFD5DC",
+              opacity: loggingOut ? 0.7 : 1,
             },
           ]}
           onPress={handleLogout}
           activeOpacity={0.9}
+          disabled={loggingOut}
         >
           <View
             style={[
@@ -251,17 +265,23 @@ export default function ProfileScreen() {
               },
             ]}
           >
-            <Feather name="log-out" size={18} color="#E5485D" />
+            {loggingOut ? (
+              <ActivityIndicator size="small" color="#E5485D" />
+            ) : (
+              <Feather name="log-out" size={18} color="#E5485D" />
+            )}
           </View>
 
-          <Text style={styles.logoutText}>Cerrar sesión</Text>
+          <Text style={styles.logoutText}>
+            {loggingOut ? "Cerrando..." : "Cerrar sesión"}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function ProfileOption({
+const ProfileOption = memo(function ProfileOption({
   icon,
   title,
   subtitle,
@@ -272,48 +292,33 @@ function ProfileOption({
   title: string;
   subtitle: string;
   onPress?: () => void;
-  colors: {
-    primarySoft: string;
-    text: string;
-    muted: string;
-  };
+  colors: Pick<Colors, "primarySoft" | "text" | "muted">;
 }) {
   return (
     <TouchableOpacity
       style={styles.option}
       activeOpacity={0.85}
       onPress={onPress}
+      disabled={!onPress}
     >
-      <View
-        style={[
-          styles.optionIcon,
-          { backgroundColor: colors.primarySoft },
-        ]}
-      >
+      <View style={[styles.optionIcon, { backgroundColor: colors.primarySoft }]}>
         <Feather name={icon} size={20} color={colors.text} />
       </View>
 
       <View style={styles.optionTextBox}>
-        <Text style={[styles.optionTitle, { color: colors.text }]}>
-          {title}
-        </Text>
+        <Text style={[styles.optionTitle, { color: colors.text }]}>{title}</Text>
 
         <Text style={[styles.optionSubtitle, { color: colors.muted }]}>
           {subtitle}
         </Text>
       </View>
 
-      <View
-        style={[
-          styles.optionArrow,
-          { backgroundColor: colors.primarySoft },
-        ]}
-      >
+      <View style={[styles.optionArrow, { backgroundColor: colors.primarySoft }]}>
         <Feather name="chevron-right" size={20} color={colors.text} />
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   safeArea: {

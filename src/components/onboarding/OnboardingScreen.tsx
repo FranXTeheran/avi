@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from "react";
 import {
   Image,
   ImageSourcePropType,
@@ -15,6 +16,7 @@ const YELLOW = "#FFC21A";
 const BLACK = "#1F1F1F";
 const GRAY = "#8A8A8A";
 const LIGHT_GRAY = "#EDEDED";
+const BORDER = "#E8E8E8";
 
 type Props = {
   image: ImageSourcePropType;
@@ -51,7 +53,11 @@ export default function OnboardingScreen({
   secondButtonIcon = "link",
   primaryIcon,
 }: Props) {
-  function renderTitle() {
+  const handleSkip = useCallback(() => {
+    router.replace("/home");
+  }, []);
+
+  const renderedTitle = useMemo(() => {
     if (!highlight || !title.includes(highlight)) {
       return <Text style={styles.title}>{title}</Text>;
     }
@@ -65,17 +71,15 @@ export default function OnboardingScreen({
         {parts[1]}
       </Text>
     );
-  }
+  }, [highlight, title]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["left", "right", "bottom"]}>
       <View style={styles.screen}>
-        <View style={styles.topBar} />
-
         <TouchableOpacity
           style={styles.skipButton}
           activeOpacity={0.7}
-          onPress={() => router.replace("/home")}
+          onPress={handleSkip}
         >
           <Text style={styles.skipText}>Saltar</Text>
         </TouchableOpacity>
@@ -89,9 +93,9 @@ export default function OnboardingScreen({
         </View>
 
         <View style={styles.content}>
-          {renderTitle()}
+          {renderedTitle}
 
-          {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+          {!!subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
 
           <Text style={styles.description}>{description}</Text>
 
@@ -116,20 +120,21 @@ export default function OnboardingScreen({
             <Text style={styles.primaryButtonText}>{buttonText}</Text>
           </TouchableOpacity>
 
-          {secondButtonText && onSecondButtonPress && (
+          {!!secondButtonText && !!onSecondButtonPress && (
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={onSecondButtonPress}
               activeOpacity={0.9}
             >
               <Feather name={secondButtonIcon} size={16} color={BLACK} />
+
               <Text style={styles.secondaryButtonText} numberOfLines={1}>
                 {secondButtonText}
               </Text>
             </TouchableOpacity>
           )}
 
-          {secondaryText && onSecondaryPress && (
+          {!!secondaryText && !!onSecondaryPress && (
             <TouchableOpacity
               onPress={onSecondaryPress}
               activeOpacity={0.8}
@@ -147,17 +152,12 @@ export default function OnboardingScreen({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: YELLOW,
+    backgroundColor: "#FFFFFF",
   },
 
   screen: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-  },
-
-  topBar: {
-    height: 0,
-    backgroundColor: YELLOW,
   },
 
   skipButton: {
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: "#E8E8E8",
+    borderColor: BORDER,
     backgroundColor: "#FFFFFF",
     marginTop: 14,
     paddingHorizontal: 16,

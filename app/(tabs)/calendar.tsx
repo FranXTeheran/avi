@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -37,11 +37,17 @@ type ActivityTone = {
   icon: keyof typeof Ionicons.glyphMap;
 };
 
+type Colors = ReturnType<typeof useAppTheme>["colors"];
+
 const WEEK_DAYS = ["LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB", "DOM"];
 const FALLBACK_TIME = 9999999999999;
+const TAB_ACTIVITY_LIMIT = 3;
 
 function getLocalDateKey(value: string | Date) {
   const date = typeof value === "string" ? new Date(value) : value;
+
+  if (Number.isNaN(date.getTime())) return "";
+
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
   const day = `${date.getDate()}`.padStart(2, "0");
@@ -88,14 +94,13 @@ function formatSelectedDate(dateKey: string) {
 function formatTime(value: string | null) {
   if (!value) return "Sin hora";
 
-  return new Date(value).toLocaleTimeString("es-CO", {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sin hora";
+
+  return date.toLocaleTimeString("es-CO", {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function isToday(dateKey: string) {
-  return dateKey === getLocalDateKey(new Date());
 }
 
 function normalizeStatus(status: string | null | undefined): ActivityStatus {
@@ -114,18 +119,7 @@ function getStatusLabel(status: ActivityStatus) {
   return "Pendiente";
 }
 
-function getActivityTone(
-  status: ActivityStatus,
-  isDark: boolean,
-  colors: {
-    primary: string;
-    primarySoft: string;
-    success: string;
-    successSoft: string;
-    danger: string;
-    dangerSoft: string;
-  }
-): ActivityTone {
+function getActivityTone(status: ActivityStatus, isDark: boolean, colors: Colors): ActivityTone {
   if (status === "completed") {
     return {
       color: colors.success,
@@ -157,6 +151,152 @@ function getActivityTone(
   };
 }
 
+type DayCellProps = {
+  date: Date | null;
+  selectedDate: string;
+  todayKey: string;
+  activities: Activity[];
+  colors: Colors;
+  isDark: boolean;
+  onSelectDate: (dateKey: string) => void;
+  index: number;
+};
+
+const DayCell = memo(function DayCell({
+  date,
+  selectedDate,
+  todayKey,
+  activities,
+  colors,
+  isDark,
+  onSelectDate,
+  index,
+}: DayCellProps) {
+  if (!date) {
+    return <View key={`empty-${index}`} style={styles.dayCell} />;
+  }
+
+  const dateKey = getLocalDateKey(date);
+  const selected = dateKey === selectedDate;
+  const today = dateKey === todayKey;
+
+  const handlePress = () => {
+    onSelectDate(dateKey);
+  };
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      style={[
+        styles.dayCell,
+        today && !selected && { backgroundColor: colors.primarySoft },
+        selected && { backgroundColor: colors.primary },
+      ]}
+    >
+      <Text
+        style={[
+          styles.dayText,
+          {
+            color: selected ? "#FFFFFF" : colors.text,
+            fontWeight: selected ? "900" : "700",
+          },
+        ]}
+      >
+        {date.getDate()}
+      </Text>
+
+      <View style={styles.dotsRow}>
+        {activities.slice(0, TAB_ACTIVITY_LIMIT).map((activity) => {
+          const tone = getActivityTone(normalizeStatus(activity.status), isDark, colors);
+
+          return (
+            <View
+              key={activity.id}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: selected ? "#FFFFFF" : tone.color,
+                },
+              ]}
+            />
+          );
+        })}
+      </View>
+    </Pressable>
+  );
+});
+
+type ActivityCardProps = {
+  item: Activity;
+  colors: Colors;
+  isDark: boolean;
+  onOpenActivity: (id: string) => void;
+};
+
+const ActivityCard = memo(function ActivityCard({
+  item,
+  colors,
+  isDark,
+  onOpenActivity,
+}: ActivityCardProps) {
+  const normalizedStatus = normalizeStatus(item.status);
+  const tone = getActivityTone(normalizedStatus, isDark, colors);
+
+  const handlePress = () => {
+    onOpenActivity(item.id);
+  };
+
+  return (
+    <Pressable
+      style={[
+        styles.activityCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+        },
+      ]}
+      onPress={handlePress}
+    >
+      <View style={[styles.leftAccent, { backgroundColor: tone.color }]} />
+
+      <View style={[styles.activityIcon, { backgroundColor: tone.soft }]}>
+        <Ionicons name={tone.icon} size={24} color={tone.color} />
+      </View>
+
+      <View style={styles.activityInfo}>
+        <Text
+          style={[styles.activityTitle, { color: colors.text }]}
+          numberOfLines={1}
+        >
+          {item.title}
+        </Text>
+
+        <Text
+          style={[styles.activityMeta, { color: colors.muted }]}
+          numberOfLines={1}
+        >
+          {item.type || "Actividad académica"}
+          {item.unit_number ? ` · Unidad ${item.unit_number}` : ""}
+        </Text>
+
+        <View style={styles.timeRow}>
+          <Ionicons name="time-outline" size={15} color={colors.muted} />
+
+          <Text style={[styles.activityTime, { color: colors.muted }]}>
+            {formatTime(item.due_at)}
+          </Text>
+        </View>
+      </View>
+
+      <View style={[styles.statusBadge, { backgroundColor: tone.soft }]}>
+        <Text style={[styles.statusText, { color: tone.color }]}>
+          {getStatusLabel(normalizedStatus)}
+        </Text>
+      </View>
+    </Pressable>
+  );
+});
+
 export default function CalendarScreen() {
   const { mode, colors } = useAppTheme();
   const isDark = mode === "dark";
@@ -165,8 +305,10 @@ export default function CalendarScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(getLocalDateKey(new Date()));
+  const [currentMonth, setCurrentMonth] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState(() => getLocalDateKey(new Date()));
+
+  const todayKey = useMemo(() => getLocalDateKey(new Date()), []);
 
   const loadActivities = useCallback(async (isRefresh = false) => {
     try {
@@ -178,6 +320,8 @@ export default function CalendarScreen() {
 
       const data = await getActivities();
       setActivities(data ?? []);
+    } catch (error) {
+      console.log("Error cargando calendario:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -199,11 +343,9 @@ export default function CalendarScreen() {
       if (!activity.due_at) return acc;
 
       const key = getLocalDateKey(activity.due_at);
+      if (!key) return acc;
 
-      if (!acc[key]) {
-        acc[key] = [];
-      }
-
+      if (!acc[key]) acc[key] = [];
       acc[key].push(activity);
 
       return acc;
@@ -221,6 +363,52 @@ export default function CalendarScreen() {
 
   const monthDays = useMemo(() => getMonthDays(currentMonth), [currentMonth]);
 
+  const monthLabel = useMemo(() => formatMonth(currentMonth), [currentMonth]);
+
+  const selectedDateLabel = useMemo(
+    () => formatSelectedDate(selectedDate),
+    [selectedDate]
+  );
+
+  const handlePreviousMonth = useCallback(() => {
+    setCurrentMonth((month) => {
+      return new Date(month.getFullYear(), month.getMonth() - 1, 1);
+    });
+  }, []);
+
+  const handleNextMonth = useCallback(() => {
+    setCurrentMonth((month) => {
+      return new Date(month.getFullYear(), month.getMonth() + 1, 1);
+    });
+  }, []);
+
+  const handleSelectDate = useCallback((dateKey: string) => {
+    setSelectedDate(dateKey);
+  }, []);
+
+  const handleGoToday = useCallback(() => {
+    setSelectedDate(getLocalDateKey(new Date()));
+  }, []);
+
+  const handleOpenActivity = useCallback((id: string) => {
+    router.push({
+      pathname: "/activity/[id]",
+      params: { id },
+    });
+  }, []);
+
+  const renderActivity = useCallback(
+    ({ item }: { item: Activity }) => (
+      <ActivityCard
+        item={item}
+        colors={colors}
+        isDark={isDark}
+        onOpenActivity={handleOpenActivity}
+      />
+    ),
+    [colors, isDark, handleOpenActivity]
+  );
+
   if (loading) {
     return (
       <SafeAreaView
@@ -229,14 +417,7 @@ export default function CalendarScreen() {
       >
         <StatusBar style={isDark ? "light" : "dark"} translucent />
 
-        <View
-          style={[
-            styles.loading,
-            {
-              backgroundColor: colors.background,
-            },
-          ]}
-        >
+        <View style={[styles.loading, { backgroundColor: colors.background }]}>
           <ActivityIndicator color={colors.primary} />
 
           <Text style={[styles.loadingText, { color: colors.muted }]}>
@@ -258,9 +439,7 @@ export default function CalendarScreen() {
         style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={[
           styles.content,
-          {
-            backgroundColor: colors.background,
-          },
+          { backgroundColor: colors.background },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -273,9 +452,7 @@ export default function CalendarScreen() {
       >
         <View style={styles.header}>
           <View>
-            <Text style={[styles.logo, { color: colors.primary }]}>
-              AGENDA
-            </Text>
+            <Text style={[styles.logo, { color: colors.primary }]}>AGENDA</Text>
 
             <Text style={[styles.title, { color: colors.text }]}>
               Calendario
@@ -298,45 +475,19 @@ export default function CalendarScreen() {
         >
           <View style={styles.monthHeader}>
             <Pressable
-              style={[
-                styles.monthButton,
-                {
-                  backgroundColor: colors.primarySoft,
-                },
-              ]}
-              onPress={() =>
-                setCurrentMonth(
-                  new Date(
-                    currentMonth.getFullYear(),
-                    currentMonth.getMonth() - 1,
-                    1
-                  )
-                )
-              }
+              style={[styles.monthButton, { backgroundColor: colors.primarySoft }]}
+              onPress={handlePreviousMonth}
             >
               <Ionicons name="chevron-back" size={22} color={colors.text} />
             </Pressable>
 
             <Text style={[styles.monthTitle, { color: colors.text }]}>
-              {formatMonth(currentMonth)}
+              {monthLabel}
             </Text>
 
             <Pressable
-              style={[
-                styles.monthButton,
-                {
-                  backgroundColor: colors.primarySoft,
-                },
-              ]}
-              onPress={() =>
-                setCurrentMonth(
-                  new Date(
-                    currentMonth.getFullYear(),
-                    currentMonth.getMonth() + 1,
-                    1
-                  )
-                )
-              }
+              style={[styles.monthButton, { backgroundColor: colors.primarySoft }]}
+              onPress={handleNextMonth}
             >
               <Ionicons name="chevron-forward" size={22} color={colors.text} />
             </Pressable>
@@ -352,66 +503,21 @@ export default function CalendarScreen() {
 
           <View style={styles.daysGrid}>
             {monthDays.map((date, index) => {
-              if (!date) {
-                return <View key={`empty-${index}`} style={styles.dayCell} />;
-              }
-
-              const key = getLocalDateKey(date);
-              const selected = key === selectedDate;
-              const today = isToday(key);
-              const dayActivities = activitiesByDate[key] ?? [];
+              const dateKey = date ? getLocalDateKey(date) : "";
+              const dayActivities = dateKey ? activitiesByDate[dateKey] ?? [] : [];
 
               return (
-                <Pressable
-                  key={key}
-                  onPress={() => setSelectedDate(key)}
-                  style={[
-                    styles.dayCell,
-                    today &&
-                      !selected && {
-                        backgroundColor: colors.primarySoft,
-                      },
-                    selected && {
-                      backgroundColor: colors.primary,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.dayText,
-                      {
-                        color: selected ? "#FFFFFF" : colors.text,
-                        fontWeight: selected ? "900" : "700",
-                      },
-                    ]}
-                  >
-                    {date.getDate()}
-                  </Text>
-
-                  <View style={styles.dotsRow}>
-                    {dayActivities.slice(0, 3).map((activity) => {
-                      const tone = getActivityTone(
-                        normalizeStatus(activity.status),
-                        isDark,
-                        colors
-                      );
-
-                      return (
-                        <View
-                          key={activity.id}
-                          style={[
-                            styles.dot,
-                            {
-                              backgroundColor: selected
-                                ? "#FFFFFF"
-                                : tone.color,
-                            },
-                          ]}
-                        />
-                      );
-                    })}
-                  </View>
-                </Pressable>
+                <DayCell
+                  key={dateKey || `empty-${index}`}
+                  date={date}
+                  selectedDate={selectedDate}
+                  todayKey={todayKey}
+                  activities={dayActivities}
+                  colors={colors}
+                  isDark={isDark}
+                  onSelectDate={handleSelectDate}
+                  index={index}
+                />
               );
             })}
           </View>
@@ -419,17 +525,12 @@ export default function CalendarScreen() {
 
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            {formatSelectedDate(selectedDate)}
+            {selectedDateLabel}
           </Text>
 
           <Pressable
-            style={[
-              styles.todayBadge,
-              {
-                backgroundColor: colors.primarySoft,
-              },
-            ]}
-            onPress={() => setSelectedDate(getLocalDateKey(new Date()))}
+            style={[styles.todayBadge, { backgroundColor: colors.primarySoft }]}
+            onPress={handleGoToday}
           >
             <Ionicons name="calendar-outline" size={16} color={colors.text} />
 
@@ -450,12 +551,7 @@ export default function CalendarScreen() {
             ]}
           >
             <View
-              style={[
-                styles.emptyIcon,
-                {
-                  backgroundColor: colors.primarySoft,
-                },
-              ]}
+              style={[styles.emptyIcon, { backgroundColor: colors.primarySoft }]}
             >
               <Ionicons
                 name="sparkles-outline"
@@ -478,118 +574,11 @@ export default function CalendarScreen() {
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
             contentContainerStyle={styles.list}
-            renderItem={({ item }) => {
-              const normalizedStatus = normalizeStatus(item.status);
-              const tone = getActivityTone(normalizedStatus, isDark, colors);
-
-              return (
-                <Pressable
-                  style={[
-                    styles.activityCard,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/activity/[id]",
-                      params: { id: item.id },
-                    })
-                  }
-                >
-                  <View
-                    style={[
-                      styles.leftAccent,
-                      {
-                        backgroundColor: tone.color,
-                      },
-                    ]}
-                  />
-
-                  <View
-                    style={[
-                      styles.activityIcon,
-                      {
-                        backgroundColor: tone.soft,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name={tone.icon}
-                      size={24}
-                      color={tone.color}
-                    />
-                  </View>
-
-                  <View style={styles.activityInfo}>
-                    <Text
-                      style={[
-                        styles.activityTitle,
-                        {
-                          color: colors.text,
-                        },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.title}
-                    </Text>
-
-                    <Text
-                      style={[
-                        styles.activityMeta,
-                        {
-                          color: colors.muted,
-                        },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.type || "Actividad académica"}
-                      {item.unit_number ? ` · Unidad ${item.unit_number}` : ""}
-                    </Text>
-
-                    <View style={styles.timeRow}>
-                      <Ionicons
-                        name="time-outline"
-                        size={15}
-                        color={colors.muted}
-                      />
-
-                      <Text
-                        style={[
-                          styles.activityTime,
-                          {
-                            color: colors.muted,
-                          },
-                        ]}
-                      >
-                        {formatTime(item.due_at)}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      {
-                        backgroundColor: tone.soft,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.statusText,
-                        {
-                          color: tone.color,
-                        },
-                      ]}
-                    >
-                      {getStatusLabel(normalizedStatus)}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            }}
+            renderItem={renderActivity}
+            initialNumToRender={6}
+            maxToRenderPerBatch={6}
+            windowSize={5}
+            removeClippedSubviews={false}
           />
         )}
       </ScrollView>

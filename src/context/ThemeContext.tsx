@@ -39,40 +39,57 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
     async function loadTheme() {
       try {
         const saved = await AsyncStorage.getItem(STORAGE_KEY);
+
+        if (!mounted) return;
+
         if (saved === "dark" || saved === "light") {
           setMode(saved);
         }
       } catch (error) {
         console.log("Error cargando tema:", error);
       } finally {
-        setIsReady(true);
+        if (mounted) {
+          setIsReady(true);
+        }
       }
     }
 
     loadTheme();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const toggleTheme = useCallback(async () => {
-    try {
-      const next = mode === "light" ? "dark" : "light";
-      setMode(next);
-      await AsyncStorage.setItem(STORAGE_KEY, next);
-    } catch (error) {
-      console.log("Error guardando tema:", error);
-    }
+  const colors = useMemo(() => {
+    return mode === "dark" ? darkColors : lightColors;
   }, [mode]);
+
+  const toggleTheme = useCallback(() => {
+    setMode((currentMode) => {
+      const nextMode = currentMode === "light" ? "dark" : "light";
+
+      AsyncStorage.setItem(STORAGE_KEY, nextMode).catch((error) => {
+        console.log("Error guardando tema:", error);
+      });
+
+      return nextMode;
+    });
+  }, []);
 
   const value = useMemo(
     () => ({
       mode,
-      colors: mode === "dark" ? darkColors : lightColors,
+      colors,
       toggleTheme,
       isReady,
     }),
-    [mode, isReady, toggleTheme]
+    [mode, colors, toggleTheme, isReady]
   );
 
   return (

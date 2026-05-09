@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   StyleSheet,
   Text,
   View,
-  ScrollView,
 } from "react-native";
 
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -37,10 +37,10 @@ type Subject = {
 };
 
 function getSubjectName(activity: Activity) {
-  if (activity.subject_name?.trim()) return activity.subject_name.trim();
-  if (activity.subject_code?.trim()) return activity.subject_code.trim();
+  const subjectName = activity.subject_name?.trim();
+  const subjectCode = activity.subject_code?.trim();
 
-  return "Materia sin clasificar";
+  return subjectName || subjectCode || "Materia sin clasificar";
 }
 
 function createSubjectId(name: string) {
@@ -51,6 +51,66 @@ function createSubjectId(name: string) {
     .replace(/[^a-z0-9áéíóúñü-]/gi, "");
 }
 
+function buildSubjects(activities: Activity[]) {
+  const grouped = new Map<
+    string,
+    {
+      total: number;
+      completed: number;
+      pending: number;
+      currentUnit: number;
+    }
+  >();
+
+  let pendingCount = 0;
+
+  for (const activity of activities) {
+    const subjectName = getSubjectName(activity);
+    const current = grouped.get(subjectName) ?? {
+      total: 0,
+      completed: 0,
+      pending: 0,
+      currentUnit: 1,
+    };
+
+    current.total += 1;
+
+    if (activity.status === "completed") {
+      current.completed += 1;
+    } else {
+      current.pending += 1;
+      pendingCount += 1;
+    }
+
+    if (
+      typeof activity.unit_number === "number" &&
+      activity.unit_number > current.currentUnit
+    ) {
+      current.currentUnit = activity.unit_number;
+    }
+
+    grouped.set(subjectName, current);
+  }
+
+  const subjects: Subject[] = Array.from(grouped.entries())
+    .map(([name, stats]) => ({
+      id: createSubjectId(name),
+      name,
+      progress:
+        stats.total === 0 ? 0 : Math.round((stats.completed / stats.total) * 100),
+      pending: stats.pending,
+      currentUnit: stats.currentUnit,
+    }))
+    .sort((a, b) => {
+      if (a.name === "Materia sin clasificar") return 1;
+      if (b.name === "Materia sin clasificar") return -1;
+
+      return a.name.localeCompare(b.name);
+    });
+
+  return { subjects, pendingCount };
+}
+
 export default function SubjectsScreen() {
   const { mode, colors } = useAppTheme();
   const isDark = mode === "dark";
@@ -58,130 +118,45 @@ export default function SubjectsScreen() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadActivities();
-  }, []);
-
-  async function loadActivities() {
+  const loadActivities = useCallback(async () => {
     try {
       setLoading(true);
+
       const data = await getActivities();
+
       setActivities(data ?? []);
     } catch (error) {
       console.log("Error cargando materias:", error);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  const pendingCount = useMemo(() => {
-    let count = 0;
+  useEffect(() => {
+    loadActivities();
+  }, [loadActivities]);
 
-    for (const activity of activities) {
-      if (activity.status !== "completed") {
-        count++;
-      }
-    }
+  const { subjects, pendingCount } = useMemo(
+    () => buildSubjects(activities),
+    [activities]
+  );
 
-    return count;
-  }, [activities]);
+  const renderSubject = useCallback(
+    ({ item }: { item: Subject }) => (
+      <SubjectCard
+        id={item.id}
+        name={item.name}
+        progress={item.progress}
+        pending={item.pending}
+        currentUnit={item.currentUnit}
+      />
+    ),
+    []
+  );
 
-  const subjects = useMemo<Subject[]>(() => {
-    const grouped = activities.reduce<Record<string, Activity[]>>(
-      (acc, activity) => {
-        const subjectName = getSubjectName(activity);
-
-        if (!acc[subjectName]) {
-          acc[subjectName] = [];
-        }
-
-        acc[subjectName].push(activity);
-        return acc;
-      },
-      {}
-    );
-
-    return Object.entries(grouped)
-      .map(([name, subjectActivities]) => {
-        let completed = 0;
-        let pending = 0;
-        let currentUnit = 1;
-
-        for (const activity of subjectActivities) {
-          if (activity.status === "completed") {
-            completed++;
-          } else {
-            pending++;
-          }
-
-          if (
-            typeof activity.unit_number === "number" &&
-            activity.unit_number > currentUnit
-          ) {
-            currentUnit = activity.unit_number;
-          }
-        }
-
-        const progress =
-          subjectActivities.length === 0
-            ? 0
-            : Math.round((completed / subjectActivities.length) * 100);
-
-        return {
-          id: createSubjectId(name),
-          name,
-          progress,
-          pending,
-          currentUnit,
-        };
-      })
-      .sort((a, b) => {
-        if (a.name === "Materia sin clasificar") return 1;
-        if (b.name === "Materia sin clasificar") return -1;
-
-        return a.name.localeCompare(b.name);
-      });
-  }, [activities]);
-
-  if (loading) {
-    return (
-      <SafeAreaView
-        style={[styles.safeArea, { backgroundColor: colors.background }]}
-        edges={["top"]}
-      >
-        <StatusBar style={isDark ? "light" : "dark"} translucent />
-
-        <View
-          style={[
-            styles.loading,
-            { backgroundColor: colors.background },
-          ]}
-        >
-          <ActivityIndicator color={colors.primary} />
-
-          <Text style={[styles.loadingText, { color: colors.muted }]}>
-            Cargando materias...
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: colors.background }]}
-      edges={["top"]}
-    >
-      <StatusBar style={isDark ? "light" : "dark"} translucent />
-
-      <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
-        contentContainerStyle={[
-          styles.content,
-          { backgroundColor: colors.background },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
+  const ListHeader = useMemo(
+    () => (
+      <>
         <View style={styles.header}>
           <View>
             <Text style={[styles.logo, { color: colors.primary }]}>
@@ -251,54 +226,110 @@ export default function SubjectsScreen() {
             </Text>
           </View>
         </View>
+      </>
+    ),
+    [
+      colors.primary,
+      colors.text,
+      colors.muted,
+      colors.surface,
+      colors.border,
+      colors.primarySoft,
+      isDark,
+      subjects.length,
+      pendingCount,
+    ]
+  );
 
-        {subjects.length === 0 ? (
-          <View
-            style={[
-              styles.emptyCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                shadowOpacity: isDark ? 0 : 0.05,
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.emptyIcon,
-                { backgroundColor: colors.primarySoft },
-              ]}
-            >
-              <Ionicons
-                name="file-tray-outline"
-                size={34}
-                color={colors.primary}
-              />
-            </View>
+  const ListEmpty = useMemo(
+    () => (
+      <View
+        style={[
+          styles.emptyCard,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            shadowOpacity: isDark ? 0 : 0.05,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.emptyIcon,
+            { backgroundColor: colors.primarySoft },
+          ]}
+        >
+          <Ionicons
+            name="file-tray-outline"
+            size={34}
+            color={colors.primary}
+          />
+        </View>
 
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              No hay materias todavía
-            </Text>
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>
+          No hay materias todavía
+        </Text>
 
-            <Text style={[styles.emptyText, { color: colors.muted }]}>
-              Importa tu calendario para que AVI pueda organizar tus actividades.
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.list}>
-            {subjects.map((subject) => (
-              <SubjectCard
-                key={subject.id}
-                id={subject.id}
-                name={subject.name}
-                progress={subject.progress}
-                pending={subject.pending}
-                currentUnit={subject.currentUnit}
-              />
-            ))}
-          </View>
-        )}
-      </ScrollView>
+        <Text style={[styles.emptyText, { color: colors.muted }]}>
+          Importa tu calendario para que AVI pueda organizar tus actividades.
+        </Text>
+      </View>
+    ),
+    [
+      colors.surface,
+      colors.border,
+      colors.primarySoft,
+      colors.primary,
+      colors.text,
+      colors.muted,
+      isDark,
+    ]
+  );
+
+  if (loading) {
+    return (
+      <SafeAreaView
+        style={[styles.safeArea, { backgroundColor: colors.background }]}
+        edges={["top"]}
+      >
+        <StatusBar style={isDark ? "light" : "dark"} translucent />
+
+        <View style={[styles.loading, { backgroundColor: colors.background }]}>
+          <ActivityIndicator color={colors.primary} />
+
+          <Text style={[styles.loadingText, { color: colors.muted }]}>
+            Cargando materias...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+      edges={["top"]}
+    >
+      <StatusBar style={isDark ? "light" : "dark"} translucent />
+
+      <FlatList
+        data={subjects}
+        keyExtractor={(item) => item.id}
+        renderItem={renderSubject}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={ListEmpty}
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={[
+          styles.content,
+          { backgroundColor: colors.background },
+          subjects.length > 0 && styles.list,
+        ]}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        removeClippedSubviews={false}
+      />
     </SafeAreaView>
   );
 }

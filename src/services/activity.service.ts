@@ -1,6 +1,6 @@
 import { supabase } from "@/src/lib/supabase";
 
-type Activity = {
+export type Activity = {
   id: string;
   user_id: string;
   external_uid: string | null;
@@ -18,9 +18,23 @@ type Activity = {
   created_at: string;
 };
 
+export type ImportedActivity = {
+  external_uid: string;
+  title: string;
+  description: string | null;
+  due_at: string | null;
+  source_url: string | null;
+  type: string | null;
+  unit_number: number | null;
+  priority: string | null;
+  subject_name: string | null;
+  subject_code: string | null;
+};
+
 let activitiesCache: Activity[] | null = null;
 let activitiesCacheUserId: string | null = null;
 let activitiesCacheTimestamp = 0;
+let activitiesRequest: Promise<Activity[]> | null = null;
 
 const CACHE_TTL_MS = 1000 * 60 * 2;
 
@@ -30,9 +44,7 @@ async function getCurrentUser() {
     error,
   } = await supabase.auth.getUser();
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return user;
 }
@@ -54,16 +66,39 @@ export function clearActivitiesCache() {
   activitiesCache = null;
   activitiesCacheUserId = null;
   activitiesCacheTimestamp = 0;
+  activitiesRequest = null;
 }
 
-export async function saveImportedActivities(activities: any[]) {
+async function fetchActivities(userId: string) {
+  const { data, error } = await supabase
+    .from("activities")
+    .select("*")
+    .eq("user_id", userId)
+    .order("due_at", {
+      ascending: true,
+      nullsFirst: false,
+    });
+
+  if (error) throw error;
+
+  const activities = (data ?? []) as Activity[];
+
+  setActivitiesCache(userId, activities);
+
+  return activities;
+}
+
+export async function saveImportedActivities(activities: ImportedActivity[]) {
   const user = await getCurrentUser();
 
   if (!user) {
     throw new Error("Usuario no autenticado");
   }
 
-  // No incluimos status ni completed_at para no pisar actividades ya completadas
+  if (activities.length === 0) {
+    return [];
+  }
+
   const payload = activities.map((activity) => ({
     user_id: user.id,
     external_uid: activity.external_uid,
@@ -86,21 +121,17 @@ export async function saveImportedActivities(activities: any[]) {
     })
     .select();
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   clearActivitiesCache();
 
-  return data;
+  return (data ?? []) as Activity[];
 }
 
 export async function hasImportedActivities() {
   const user = await getCurrentUser();
 
-  if (!user) {
-    return false;
-  }
+  if (!user) return false;
 
   if (isCacheValid(user.id)) {
     return activitiesCache!.length > 0;
@@ -114,9 +145,7 @@ export async function hasImportedActivities() {
     })
     .eq("user_id", user.id);
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   return Number(count) > 0;
 }
@@ -124,49 +153,53 @@ export async function hasImportedActivities() {
 export async function getActivities(options?: { forceRefresh?: boolean }) {
   const user = await getCurrentUser();
 
-  if (!user) {
-    return [];
-  }
+  if (!user) return [];
 
   if (!options?.forceRefresh && isCacheValid(user.id)) {
     return activitiesCache!;
   }
 
-  const { data, error } = await supabase
-    .from("activities")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("due_at", {
-      ascending: true,
-    });
-
-  if (error) {
-    throw error;
+  if (!options?.forceRefresh && activitiesRequest) {
+    return activitiesRequest;
   }
 
-  const activities = (data ?? []) as Activity[];
+  activitiesRequest = fetchActivities(user.id);
 
-  setActivitiesCache(user.id, activities);
-
-  return activities;
+  try {
+    return await activitiesRequest;
+  } finally {
+    activitiesRequest = null;
+  }
 }
 
 export async function completeActivity(id: string) {
+  const completedAt = new Date().toISOString();
+
   const { data, error } = await supabase
     .from("activities")
     .update({
       status: "completed",
-      completed_at: new Date().toISOString(),
+      completed_at: completedAt,
     })
     .eq("id", id)
     .select()
     .single();
 
-  if (error) {
-    throw error;
+  if (error) throw error;
+
+  if (activitiesCache) {
+    activitiesCache = activitiesCache.map((activity) =>
+      activity.id === id
+        ? {
+            ...activity,
+            status: "completed",
+            completed_at: completedAt,
+          }
+        : activity
+    );
+
+    activitiesCacheTimestamp = Date.now();
   }
 
-  clearActivitiesCache();
-
-  return data;
+  return data as Activity;
 }

@@ -15,28 +15,32 @@ type ActivityCardProps = {
   status: ActivityStatus | string;
 };
 
-const lightConfigs = {
+type StatusConfig = {
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  soft: string;
+};
+
+const lightConfigs: Record<ActivityStatus, StatusConfig> = {
   pending: {
     label: "Urgente",
     icon: "flame-outline",
     color: "#FF7A59",
     soft: "#FFF0EA",
   },
-
   upcoming: {
     label: "Próxima",
     icon: "time-outline",
     color: "#4A90E2",
     soft: "#EEF5FF",
   },
-
   completed: {
     label: "Completada",
     icon: "checkmark-circle-outline",
     color: "#22C55E",
     soft: "#EAF9EF",
   },
-
   overdue: {
     label: "Vencida",
     icon: "alert-circle-outline",
@@ -45,28 +49,25 @@ const lightConfigs = {
   },
 };
 
-const darkConfigs = {
+const darkConfigs: Record<ActivityStatus, StatusConfig> = {
   pending: {
     label: "Urgente",
     icon: "flame-outline",
     color: "#FF9B7A",
     soft: "#3A2119",
   },
-
   upcoming: {
     label: "Próxima",
     icon: "time-outline",
     color: "#7DB7FF",
     soft: "#172A42",
   },
-
   completed: {
     label: "Completada",
     icon: "checkmark-circle-outline",
     color: "#4ADE80",
     soft: "#14351F",
   },
-
   overdue: {
     label: "Vencida",
     icon: "alert-circle-outline",
@@ -85,6 +86,27 @@ function ActivityCard({
   const { mode, colors } = useAppTheme();
   const isDark = mode === "dark";
 
+  const config = useMemo(() => {
+    const source = isDark ? darkConfigs : lightConfigs;
+    return source[status as ActivityStatus] ?? source.pending;
+  }, [status, isDark]);
+
+  const cardStyle = useMemo(
+    () => ({
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      shadowOpacity: isDark ? 0 : 0.05,
+    }),
+    [colors.surface, colors.border, isDark]
+  );
+
+  const arrowStyle = useMemo(
+    () => ({
+      backgroundColor: colors.primarySoft,
+    }),
+    [colors.primarySoft]
+  );
+
   const handlePress = useCallback(() => {
     router.push({
       pathname: "/activity/[id]",
@@ -92,30 +114,22 @@ function ActivityCard({
     });
   }, [id]);
 
-  const config = useMemo(() => {
-    const source = isDark ? darkConfigs : lightConfigs;
-
-    return source[status as ActivityStatus] ?? source.pending;
-  }, [status, isDark]);
-
   return (
-    <Pressable onPress={handlePress}>
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            shadowOpacity: isDark ? 0 : 0.05,
-          },
-        ]}
-      >
-        <View
-          style={[
-            styles.leftAccent,
-            { backgroundColor: config.color },
-          ]}
-        />
+    <Pressable
+      onPress={handlePress}
+      android_ripple={{
+        color: config.soft,
+        borderless: false,
+      }}
+      style={({ pressed }) => [
+        styles.pressable,
+        {
+          opacity: pressed ? 0.94 : 1,
+        },
+      ]}
+    >
+      <View style={[styles.card, cardStyle]}>
+        <View style={[styles.leftAccent, { backgroundColor: config.color }]} />
 
         <View
           style={[
@@ -123,11 +137,7 @@ function ActivityCard({
             { backgroundColor: config.soft },
           ]}
         >
-          <Ionicons
-            name={config.icon as any}
-            size={22}
-            color={config.color}
-          />
+          <Ionicons name={config.icon} size={22} color={config.color} />
         </View>
 
         <View style={styles.content}>
@@ -139,18 +149,8 @@ function ActivityCard({
               {title}
             </Text>
 
-            <View
-              style={[
-                styles.badge,
-                { backgroundColor: config.soft },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.badgeText,
-                  { color: config.color },
-                ]}
-              >
+            <View style={[styles.badge, { backgroundColor: config.soft }]}>
+              <Text style={[styles.badgeText, { color: config.color }]}>
                 {config.label}
               </Text>
             </View>
@@ -176,12 +176,7 @@ function ActivityCard({
               </Text>
             </View>
 
-            <View
-              style={[
-                styles.arrow,
-                { backgroundColor: colors.primarySoft },
-              ]}
-            >
+            <View style={[styles.arrow, arrowStyle]}>
               <Ionicons
                 name="chevron-forward"
                 size={16}
@@ -198,6 +193,10 @@ function ActivityCard({
 export default memo(ActivityCard);
 
 const styles = StyleSheet.create({
+  pressable: {
+    borderRadius: 28,
+  },
+
   card: {
     borderRadius: 28,
     borderWidth: 1,
@@ -205,6 +204,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     flexDirection: "row",
     position: "relative",
+    overflow: "hidden",
     shadowColor: "#000000",
     shadowRadius: 16,
     shadowOffset: {
@@ -279,6 +279,7 @@ const styles = StyleSheet.create({
   dateContainer: {
     flexDirection: "row",
     alignItems: "center",
+    flexShrink: 1,
   },
 
   date: {
@@ -293,5 +294,6 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: 12,
   },
 });

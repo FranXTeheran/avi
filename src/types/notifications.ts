@@ -1,7 +1,7 @@
 export type NotificationSound =
   | "avi_soft.mp3"
   | "default"
-  | null;
+  | "silent";
 
 export type VibrationMode = "soft" | "off";
 
