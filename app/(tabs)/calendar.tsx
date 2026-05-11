@@ -11,7 +11,6 @@ import {
 } from "react-native";
 
 import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -415,7 +414,6 @@ export default function CalendarScreen() {
         style={[styles.safeArea, { backgroundColor: colors.background }]}
         edges={["top"]}
       >
-        <StatusBar style={isDark ? "light" : "dark"} translucent />
 
         <View style={[styles.loading, { backgroundColor: colors.background }]}>
           <ActivityIndicator color={colors.primary} />
@@ -433,7 +431,6 @@ export default function CalendarScreen() {
       style={[styles.safeArea, { backgroundColor: colors.background }]}
       edges={["top"]}
     >
-      <StatusBar style={isDark ? "light" : "dark"} translucent />
 
       <ScrollView
         style={[styles.container, { backgroundColor: colors.background }]}

@@ -3,9 +3,46 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   NotificationPreferences,
+  ReminderTimePreset,
 } from "../types/notifications";
 
 const STORAGE_KEY = "avi_notification_preferences";
+
+function sanitizeHour(value: unknown, fallback: number) {
+  if (typeof value !== "number") return fallback;
+
+  if (Number.isNaN(value)) return fallback;
+
+  if (value < 0 || value > 23) return fallback;
+
+  return Math.floor(value);
+}
+
+function sanitizeMinute(value: unknown, fallback: number) {
+  if (typeof value !== "number") return fallback;
+
+  if (Number.isNaN(value)) return fallback;
+
+  if (value < 0 || value > 59) return fallback;
+
+  return Math.floor(value);
+}
+
+function sanitizePreset(
+  value: unknown
+): ReminderTimePreset {
+  if (
+    value === "late_morning" ||
+    value === "early_morning" ||
+    value === "afternoon" ||
+    value === "calm_night" ||
+    value === "custom"
+  ) {
+    return value;
+  }
+
+  return DEFAULT_NOTIFICATION_PREFERENCES.reminderTimePreset;
+}
 
 function sanitizePreferences(
   value: Partial<NotificationPreferences>
@@ -28,6 +65,38 @@ function sanitizePreferences(
       value.vibration === "off"
         ? value.vibration
         : DEFAULT_NOTIFICATION_PREFERENCES.vibration,
+
+    reminderTimePreset:
+      sanitizePreset(value.reminderTimePreset),
+
+    preferredMainHour:
+      sanitizeHour(
+        value.preferredMainHour,
+        DEFAULT_NOTIFICATION_PREFERENCES.preferredMainHour
+      ),
+
+    preferredMainMinute:
+      sanitizeMinute(
+        value.preferredMainMinute,
+        DEFAULT_NOTIFICATION_PREFERENCES.preferredMainMinute
+      ),
+
+    preferredSoftHour:
+      sanitizeHour(
+        value.preferredSoftHour,
+        DEFAULT_NOTIFICATION_PREFERENCES.preferredSoftHour
+      ),
+
+    preferredSoftMinute:
+      sanitizeMinute(
+        value.preferredSoftMinute,
+        DEFAULT_NOTIFICATION_PREFERENCES.preferredSoftMinute
+      ),
+
+    weeklySummaryEnabled:
+      typeof value.weeklySummaryEnabled === "boolean"
+        ? value.weeklySummaryEnabled
+        : DEFAULT_NOTIFICATION_PREFERENCES.weeklySummaryEnabled,
   };
 }
 

@@ -8,7 +8,6 @@ import {
 } from "react-native";
 
 import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 
 import SubjectCard from "../../src/components/SubjectCard";
@@ -292,7 +291,6 @@ export default function SubjectsScreen() {
         style={[styles.safeArea, { backgroundColor: colors.background }]}
         edges={["top"]}
       >
-        <StatusBar style={isDark ? "light" : "dark"} translucent />
 
         <View style={[styles.loading, { backgroundColor: colors.background }]}>
           <ActivityIndicator color={colors.primary} />
@@ -310,7 +308,6 @@ export default function SubjectsScreen() {
       style={[styles.safeArea, { backgroundColor: colors.background }]}
       edges={["top"]}
     >
-      <StatusBar style={isDark ? "light" : "dark"} translucent />
 
       <FlatList
         data={subjects}

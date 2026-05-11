@@ -10,7 +10,6 @@ import {
 
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { StatusBar } from "expo-status-bar";
 
 import Screen from "../src/components/Screen";
 import ActivityCard from "../src/components/ActivityCard";
@@ -372,7 +371,6 @@ export default function ActivitiesScreen() {
           { backgroundColor: colors.background },
         ]}
       >
-        <StatusBar style={isDark ? "light" : "dark"} translucent />
 
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
@@ -393,7 +391,6 @@ export default function ActivitiesScreen() {
         { backgroundColor: colors.background },
       ]}
     >
-      <StatusBar style={isDark ? "light" : "dark"} translucent />
 
       <SectionList
         sections={sections}

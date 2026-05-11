@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "avi",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -15,6 +15,20 @@
       }
     },
     "android": {
+      "navigationBarColor": "#11120F",
+      "statusBar": {
+        "backgroundColor": "#00000000",
+        "translucent": false,
+        "barStyle": "dark-content"
+      },
+      "permissions": [
+        "NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
+        "VIBRATE",
+        "WAKE_LOCK"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -23,10 +37,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.franx_dev.avi",
-      "permissions": [
-        "NOTIFICATIONS"
-      ]
+      "package": "com.franx_dev.avi"
     },
     "web": {
       "output": "static",
@@ -60,11 +71,12 @@
           "sounds": [
             "./assets/sounds/avi_soft.wav"
           ],
-            "icon": "./assets/notifications/notification-icon.png",
-            "color": "#FFC21A"
+          "icon": "./assets/notifications/notification-icon.png",
+          "color": "#FFC21A"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

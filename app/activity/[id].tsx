@@ -11,7 +11,6 @@ import {
 
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { StatusBar } from "expo-status-bar";
 import { cancelActivityNotifications } from "@/src/services/activity-notification.service";
 
 import Screen from "../../src/components/Screen";
@@ -264,7 +263,6 @@ export default function ActivityDetailScreen() {
           { backgroundColor: colors.background },
         ]}
       >
-        <StatusBar style={isDark ? "light" : "dark"} translucent />
 
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
@@ -285,7 +283,6 @@ export default function ActivityDetailScreen() {
           { backgroundColor: colors.background },
         ]}
       >
-        <StatusBar style={isDark ? "light" : "dark"} translucent />
 
         <View style={styles.center}>
           <View
@@ -325,7 +322,6 @@ export default function ActivityDetailScreen() {
         { backgroundColor: colors.background },
       ]}
     >
-      <StatusBar style={isDark ? "light" : "dark"} translucent />
 
       <View style={styles.header}>
         <Pressable

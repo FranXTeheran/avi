@@ -8,7 +8,6 @@ import {
 
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
-import { StatusBar } from "expo-status-bar";
 
 import { useAppTheme } from "@/src/hooks/useAppTheme";
 
@@ -41,7 +40,7 @@ export default function ProcessingCalendarScreen() {
         },
       ]}
     >
-      <StatusBar style={isDark ? "light" : "dark"} translucent />
+
 
       <View style={styles.container}>
         <View

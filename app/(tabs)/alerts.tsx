@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { StatusBar } from "expo-status-bar";
 
 import Screen from "../../src/components/Screen";
 import { getActivities } from "@/src/services/activity.service";
@@ -334,7 +333,6 @@ export default function AlertsScreen() {
           { backgroundColor: colors.background },
         ]}
       >
-        <StatusBar style={isDark ? "light" : "dark"} translucent />
 
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={colors.primary} />
@@ -354,7 +352,6 @@ export default function AlertsScreen() {
         { backgroundColor: colors.background },
       ]}
     >
-      <StatusBar style={isDark ? "light" : "dark"} translucent />
 
       <View style={styles.header}>
         <Text style={[styles.label, { color: colors.primary }]}>ALERTAS</Text>

@@ -1,9 +1,10 @@
 import { useEffect, useMemo } from "react";
 import { Platform } from "react-native";
 
-import { Stack } from "expo-router";
+import { Stack, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
+import * as Notifications from "expo-notifications";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider } from "@/src/context/AuthContext";
@@ -18,7 +19,6 @@ function RootNavigator() {
 
     async function configureSystemBars() {
       try {
-        await NavigationBar.setBackgroundColorAsync(colors.background);
         await NavigationBar.setButtonStyleAsync(isDark ? "light" : "dark");
         await NavigationBar.setVisibilityAsync("visible");
       } catch (error) {
@@ -27,7 +27,53 @@ function RootNavigator() {
     }
 
     configureSystemBars();
-  }, [colors.background, isDark]);
+  }, [ isDark]);
+
+  useEffect(() => {
+      function openNotificationTarget(
+        response: Notifications.NotificationResponse
+      ) {
+        const data = response.notification.request.content.data;
+
+        const type = data?.type;
+
+        if (type === "daily_summary") {
+          router.push("/alerts" as any);
+          return;
+        }
+
+        if (type === "weekly-calm") {
+          router.push("/alerts" as any);
+          return;
+        }
+
+        const activityId = data?.activityId;
+
+        if (typeof activityId === "string" && activityId.length > 0) {
+          router.push({
+            pathname: "/activity/[id]",
+            params: {
+              id: activityId,
+            },
+          });
+        }
+      }
+
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) {
+        openNotificationTarget(response);
+      }
+    });
+
+    const subscription =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        openNotificationTarget(response);
+      });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   const screenOptions = useMemo(
     () => ({

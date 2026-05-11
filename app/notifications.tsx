@@ -10,9 +10,9 @@ import {
   ScrollView,
 } from "react-native";
 
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Notifications from "expo-notifications";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusBar } from "expo-status-bar";
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 
@@ -22,6 +22,7 @@ import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   NotificationPreferences,
   NotificationSound,
+  ReminderTimePreset,
   VibrationMode,
 } from "../src/types/notifications";
 
@@ -39,6 +40,35 @@ import { getActivities } from "../src/services/activity.service";
 
 type Colors = ReturnType<typeof useAppTheme>["colors"];
 
+type TimePresetOption = {
+  title: string;
+  subtitle: string;
+  value: ReminderTimePreset;
+  mainHour: number;
+  mainMinute: number;
+  softHour: number;
+  softMinute: number;
+};
+
+type CustomTarget = "main" | "soft";
+
+function formatTime(hour: number, minute: number) {
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+
+  return date.toLocaleTimeString("es-CO", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function createTimeDate(hour: number, minute: number) {
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+
+  return date;
+}
+
 function arePreferencesEqual(
   a: NotificationPreferences,
   b: NotificationPreferences
@@ -46,7 +76,13 @@ function arePreferencesEqual(
   return (
     a.enabled === b.enabled &&
     a.sound === b.sound &&
-    a.vibration === b.vibration
+    a.vibration === b.vibration &&
+    a.reminderTimePreset === b.reminderTimePreset &&
+    a.preferredMainHour === b.preferredMainHour &&
+    a.preferredMainMinute === b.preferredMainMinute &&
+    a.preferredSoftHour === b.preferredSoftHour &&
+    a.preferredSoftMinute === b.preferredSoftMinute &&
+    a.weeklySummaryEnabled === b.weeklySummaryEnabled
   );
 }
 
@@ -61,6 +97,9 @@ export default function NotificationSettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+
+  const [customPickerVisible, setCustomPickerVisible] = useState(false);
+  const [customTarget, setCustomTarget] = useState<CustomTarget>("main");
 
   const loadPreferences = useCallback(async () => {
     try {
@@ -95,7 +134,8 @@ export default function NotificationSettingsScreen() {
         }
 
         const activities = await getActivities();
-        rescheduleActivityNotifications(activities).catch((error) => {
+
+        rescheduleActivityNotifications(activities, true).catch((error) => {
           console.warn("Error rescheduling notifications:", error);
         });
       } catch {
@@ -117,6 +157,16 @@ export default function NotificationSettingsScreen() {
       updatePreferences({
         ...preferences,
         enabled,
+      });
+    },
+    [preferences, updatePreferences]
+  );
+
+  const handleToggleWeeklySummary = useCallback(
+    (weeklySummaryEnabled: boolean) => {
+      updatePreferences({
+        ...preferences,
+        weeklySummaryEnabled,
       });
     },
     [preferences, updatePreferences]
@@ -162,7 +212,101 @@ export default function NotificationSettingsScreen() {
     [preferences, updatePreferences]
   );
 
+  const setTimePreset = useCallback(
+    (option: TimePresetOption) => {
+      updatePreferences({
+        ...preferences,
+        reminderTimePreset: option.value,
+        preferredMainHour: option.mainHour,
+        preferredMainMinute: option.mainMinute,
+        preferredSoftHour: option.softHour,
+        preferredSoftMinute: option.softMinute,
+      });
+    },
+    [preferences, updatePreferences]
+  );
+
+  const enableCustomPreset = useCallback(() => {
+    updatePreferences({
+      ...preferences,
+      reminderTimePreset: "custom",
+    });
+  }, [preferences, updatePreferences]);
+
+  const openCustomPicker = useCallback((target: CustomTarget) => {
+    setCustomTarget(target);
+    setCustomPickerVisible(true);
+  }, []);
+
+  const handleCustomTimeChange = useCallback(
+    (_event: any, selectedDate?: Date) => {
+      setCustomPickerVisible(false);
+
+      if (!selectedDate) return;
+
+      const hour = selectedDate.getHours();
+      const minute = selectedDate.getMinutes();
+
+      updatePreferences({
+        ...preferences,
+        reminderTimePreset: "custom",
+        ...(customTarget === "main"
+          ? {
+              preferredMainHour: hour,
+              preferredMainMinute: minute,
+            }
+          : {
+              preferredSoftHour: hour,
+              preferredSoftMinute: minute,
+            }),
+      });
+    },
+    [preferences, customTarget, updatePreferences]
+  );
+
   const isBusy = saving || testing;
+
+  const timePresetOptions = useMemo<TimePresetOption[]>(
+    () => [
+      {
+        title: "Media mañana",
+        subtitle: "Ideal si revisas el celular al salir de clase.",
+        value: "late_morning",
+        mainHour: 11,
+        mainMinute: 0,
+        softHour: 19,
+        softMinute: 0,
+      },
+      {
+        title: "Mañana temprano",
+        subtitle: "Para organizarte antes de empezar el día.",
+        value: "early_morning",
+        mainHour: 8,
+        mainMinute: 0,
+        softHour: 18,
+        softMinute: 30,
+      },
+      {
+        title: "Tarde",
+        subtitle: "Para revisar pendientes después del almuerzo.",
+        value: "afternoon",
+        mainHour: 14,
+        mainMinute: 0,
+        softHour: 19,
+        softMinute: 30,
+      },
+      {
+        title: "Noche tranquila",
+        subtitle: "Para planear con calma al final del día.",
+        value: "calm_night",
+        mainHour: 17,
+        mainMinute: 0,
+        softHour: 20,
+        softMinute: 0,
+      },
+    ],
+    []
+  );
 
   const soundOptions = useMemo(
     () => [
@@ -207,7 +351,7 @@ export default function NotificationSettingsScreen() {
         style={[styles.safeArea, { backgroundColor: colors.background }]}
         edges={["top"]}
       >
-        <StatusBar style={isDark ? "light" : "dark"} translucent />
+
 
         <View
           style={[
@@ -230,7 +374,6 @@ export default function NotificationSettingsScreen() {
       style={[styles.safeArea, { backgroundColor: colors.background }]}
       edges={["top"]}
     >
-      <StatusBar style={isDark ? "light" : "dark"} translucent />
 
       <ScrollView
         style={[styles.container, { backgroundColor: colors.background }]}
@@ -305,6 +448,144 @@ export default function NotificationSettingsScreen() {
                 true: colors.primarySoft,
               }}
               thumbColor={preferences.enabled ? colors.primary : colors.subtle}
+            />
+          </View>
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Horario
+          </Text>
+
+          <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
+            Elige cuándo quieres que AVI te recuerde tus pendientes.
+          </Text>
+        </View>
+
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              shadowOpacity: isDark ? 0 : 0.05,
+            },
+          ]}
+        >
+          {timePresetOptions.map((option) => (
+            <OptionRow
+              key={option.value}
+              title={option.title}
+              subtitle={`${option.subtitle} · ${formatTime(
+                option.mainHour,
+                option.mainMinute
+              )} / ${formatTime(option.softHour, option.softMinute)}`}
+              selected={preferences.reminderTimePreset === option.value}
+              disabled={saving}
+              onPress={() => setTimePreset(option)}
+              colors={colors}
+            />
+          ))}
+
+          <OptionRow
+            title="Personalizado"
+            subtitle={`Principal ${formatTime(
+              preferences.preferredMainHour,
+              preferences.preferredMainMinute
+            )} · Suave ${formatTime(
+              preferences.preferredSoftHour,
+              preferences.preferredSoftMinute
+            )}`}
+            selected={preferences.reminderTimePreset === "custom"}
+            disabled={saving}
+            onPress={enableCustomPreset}
+            colors={colors}
+          />
+
+          {preferences.reminderTimePreset === "custom" && (
+            <View style={styles.customTimeBox}>
+              <TouchableOpacity
+                style={[
+                  styles.customTimeButton,
+                  { backgroundColor: colors.primarySoft },
+                ]}
+                activeOpacity={0.85}
+                onPress={() => openCustomPicker("main")}
+                disabled={saving}
+              >
+                <Text style={[styles.customTimeText, { color: colors.text }]}>
+                  Hora principal ·{" "}
+                  {formatTime(
+                    preferences.preferredMainHour,
+                    preferences.preferredMainMinute
+                  )}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.customTimeButton,
+                  { backgroundColor: colors.primarySoft },
+                ]}
+                activeOpacity={0.85}
+                onPress={() => openCustomPicker("soft")}
+                disabled={saving}
+              >
+                <Text style={[styles.customTimeText, { color: colors.text }]}>
+                  Recordatorio suave ·{" "}
+                  {formatTime(
+                    preferences.preferredSoftHour,
+                    preferences.preferredSoftMinute
+                  )}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              shadowOpacity: isDark ? 0 : 0.05,
+            },
+          ]}
+        >
+          <View style={styles.mainRow}>
+            <View
+              style={[
+                styles.mainIcon,
+                { backgroundColor: colors.primarySoft },
+              ]}
+            >
+              <Feather name="calendar" size={20} color={colors.text} />
+            </View>
+
+            <View style={styles.mainTextBox}>
+              <Text style={[styles.mainTitle, { color: colors.text }]}>
+                Resumen semanal
+              </Text>
+
+              <Text style={[styles.mainSubtitle, { color: colors.muted }]}>
+                AVI te ayuda a cerrar la semana con calma.
+              </Text>
+            </View>
+
+            <Switch
+              value={preferences.weeklySummaryEnabled}
+              onValueChange={handleToggleWeeklySummary}
+              disabled={saving}
+              trackColor={{
+                false: colors.border,
+                true: colors.primarySoft,
+              }}
+              thumbColor={
+                preferences.weeklySummaryEnabled
+                  ? colors.primary
+                  : colors.subtle
+              }
             />
           </View>
         </View>
@@ -395,6 +676,26 @@ export default function NotificationSettingsScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      {customPickerVisible && (
+        <DateTimePicker
+          value={
+            customTarget === "main"
+              ? createTimeDate(
+                  preferences.preferredMainHour,
+                  preferences.preferredMainMinute
+                )
+              : createTimeDate(
+                  preferences.preferredSoftHour,
+                  preferences.preferredSoftMinute
+                )
+          }
+          mode="time"
+          is24Hour={false}
+          display="default"
+          onChange={handleCustomTimeChange}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -621,6 +922,25 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
 
+  customTimeBox: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    gap: 10,
+  },
+
+  customTimeButton: {
+    minHeight: 48,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+
+  customTimeText: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
   testButton: {
     height: 58,
     borderRadius: 24,
@@ -637,16 +957,13 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
 
-
-
   testButtonText: {
     color: "#11120F",
     fontSize: 15,
     fontWeight: "900",
   },
 
-    disabledOption: {
+  disabledOption: {
     opacity: 0.65,
   },
-
 });

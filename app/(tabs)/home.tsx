@@ -11,7 +11,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import { StatusBar } from "expo-status-bar";
 import { useAppTheme } from "@/src/hooks/useAppTheme";
 
 import Screen from "../../src/components/Screen";
@@ -420,7 +419,6 @@ export default function HomeScreen() {
         style={[styles.safeArea, { backgroundColor: colors.background }]}
         edges={["top"]}
       >
-        <StatusBar style={isDark ? "light" : "dark"} translucent />
 
         <Screen
           contentStyle={[
@@ -445,7 +443,6 @@ export default function HomeScreen() {
       style={[styles.safeArea, { backgroundColor: colors.background }]}
       edges={["top"]}
     >
-      <StatusBar style={isDark ? "light" : "dark"} translucent />
 
       <Screen
         contentStyle={[

@@ -11,7 +11,6 @@ import {
 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { StatusBar } from "expo-status-bar";
 import { Feather } from "@expo/vector-icons";
 
 import { signOut } from "@/src/services/auth.service";
@@ -105,7 +104,6 @@ export default function ProfileScreen() {
         style={[styles.safeArea, { backgroundColor: colors.background }]}
         edges={["top"]}
       >
-        <StatusBar style={isDark ? "light" : "dark"} translucent />
 
         <View
           style={[
@@ -128,7 +126,6 @@ export default function ProfileScreen() {
       style={[styles.safeArea, { backgroundColor: colors.background }]}
       edges={["top"]}
     >
-      <StatusBar style={isDark ? "light" : "dark"} translucent />
 
       <ScrollView
         style={[styles.container, { backgroundColor: colors.background }]}
