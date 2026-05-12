@@ -16,6 +16,7 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 
 import { signUp } from "@/src/services/auth.service";
+import { registerPushToken } from "@/src/services/push-token.service";
 
 const YELLOW = "#FFC21A";
 const BLACK = "#1F1F1F";
@@ -58,6 +59,7 @@ export default function RegisterScreen() {
       setLoading(true);
 
       await signUp(normalizedEmail, normalizedPassword, normalizedName);
+      registerPushToken().catch(console.warn)
 
       router.replace("/(onboarding)/welcome");
     } catch (error: any) {

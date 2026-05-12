@@ -16,6 +16,7 @@ import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 
 import { signIn } from "@/src/services/auth.service";
+import { registerPushToken } from "@/src/services/push-token.service";
 
 const YELLOW = "#FFC21A";
 const BLACK = "#1F1F1F";
@@ -57,6 +58,7 @@ export default function LoginScreen() {
       setLoading(true);
 
       await signIn(normalizedEmail, normalizedPassword);
+      registerPushToken().catch(console.warn)
 
       router.replace("/home");
     } catch (error: any) {

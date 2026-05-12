@@ -9,10 +9,15 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider } from "@/src/context/AuthContext";
 import { ThemeProvider, useTheme } from "@/src/context/ThemeContext";
+import { registerPushToken } from "@/src/services/push-token.service";
 
 function RootNavigator() {
   const { mode, colors } = useTheme();
   const isDark = mode === "dark";
+  
+  useEffect(() => {
+    registerPushToken().catch(console.warn);
+  }, []);
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
