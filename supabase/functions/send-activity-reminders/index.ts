@@ -1,4 +1,11 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
+import { createClient } from "@supabase/supabase-js";
+
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+  serve(handler: () => Response | Promise<Response>): void;
+};
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 

@@ -488,7 +488,7 @@ export default function AlertsScreen() {
 const styles = StyleSheet.create({
   screenContent: {
     flexGrow: 1,
-    paddingTop: 44,
+    paddingTop: 20,
     paddingHorizontal: 28,
     paddingBottom: 120,
   },
@@ -502,7 +502,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textTransform: "uppercase",
     letterSpacing: 1,
-    marginTop: 44,
   },
 
   title: {

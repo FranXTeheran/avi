@@ -692,14 +692,14 @@ const styles = StyleSheet.create({
 
   screenContent: {
     paddingHorizontal: 28,
-    paddingTop: 44,
+    paddingTop: 20,
     paddingBottom: 120,
   },
 
   loadingContent: {
     flexGrow: 1,
     paddingHorizontal: 28,
-    paddingTop: 44,
+    paddingTop: 20,
     paddingBottom: 120,
   },
 

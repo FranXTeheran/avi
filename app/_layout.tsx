@@ -1,10 +1,11 @@
 import { useEffect, useMemo } from "react";
-import { Platform } from "react-native";
+import { Platform, StatusBar as NativeStatusBar } from "react-native";
 
 import { Stack, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
 import * as Notifications from "expo-notifications";
+import * as SystemUI from "expo-system-ui";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider } from "@/src/context/AuthContext";
@@ -24,6 +25,12 @@ function RootNavigator() {
 
     async function configureSystemBars() {
       try {
+        NativeStatusBar.setTranslucent(false);
+        NativeStatusBar.setBackgroundColor(colors.background, true);
+        NativeStatusBar.setBarStyle(isDark ? "light-content" : "dark-content", true);
+
+        await SystemUI.setBackgroundColorAsync(colors.background);
+        await NavigationBar.setBackgroundColorAsync(colors.surface);
         await NavigationBar.setButtonStyleAsync(isDark ? "light" : "dark");
         await NavigationBar.setVisibilityAsync("visible");
       } catch (error) {
@@ -32,7 +39,7 @@ function RootNavigator() {
     }
 
     configureSystemBars();
-  }, [ isDark]);
+  }, [colors.background, colors.surface, isDark]);
 
   useEffect(() => {
       function openNotificationTarget(
