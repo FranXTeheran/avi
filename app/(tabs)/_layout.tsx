@@ -30,8 +30,6 @@ export default function TabsLayout() {
         height: 72 + insets.bottom,
         paddingTop: 6,
         paddingBottom: 6 + insets.bottom,
-        borderTopLeftRadius: 0,
-        borderTopRightRadius: 0,
         shadowColor: "#000000",
         shadowOpacity: isDark ? 0 : 0.08,
         shadowRadius: 2,
@@ -95,13 +93,13 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="subjects"
+        name="kai"
         options={{
-          title: "Materias",
+          title: "Kai",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? "book" : "book-outline"}
-              size={TAB_ICON_SIZE}
+              name={focused ? "sparkles" : "sparkles-outline"}
+              size={30}
               color={color}
             />
           ),
@@ -109,12 +107,12 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="alerts"
+        name="subjects"
         options={{
-          title: "Alertas",
+          title: "Materias",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? "notifications" : "notifications-outline"}
+              name={focused ? "book" : "book-outline"}
               size={TAB_ICON_SIZE}
               color={color}
             />
