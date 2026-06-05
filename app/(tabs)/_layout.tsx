@@ -65,7 +65,7 @@ export default function TabsLayout() {
   return (
     <Tabs screenOptions={screenOptions}>
       <Tabs.Screen
-        name="home"
+        name="homeKai"
         options={{
           title: "Inicio",
           tabBarIcon: ({ color, focused }) => (

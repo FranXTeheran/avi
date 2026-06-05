@@ -18,7 +18,7 @@ export default function IndexScreen() {
       const { data } = await supabase.auth.getSession();
 
       if (data.session) {
-        router.replace("/home");
+        router.replace("/homeKai");
       } else {
         router.replace("/(auth)/login");
       }

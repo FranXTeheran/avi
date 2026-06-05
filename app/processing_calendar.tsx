@@ -22,7 +22,7 @@ export default function ProcessingCalendarScreen() {
     const timeout = setTimeout(() => {
       if (!mounted) return;
 
-      router.replace("/home");
+      router.replace("/homeKai");
     }, 900);
 
     return () => {

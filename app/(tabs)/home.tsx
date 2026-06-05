@@ -41,12 +41,6 @@ type Colors = ReturnType<typeof useAppTheme>["colors"];
 const DAY_MS = 1000 * 60 * 60 * 24;
 const TOP_DELIVERIES_LIMIT = 3;
 
-const welcomeImages = {
-  welcome: require("../../assets/images/home-welcome.png"),
-  calm: require("../../assets/images/home-calm.png"),
-  attention: require("../../assets/images/home-attention.png"),
-  support: require("../../assets/images/home-support.png"),
-};
 
 function isValidDate(date: Date) {
   return !Number.isNaN(date.getTime());
@@ -92,8 +86,7 @@ function priorityScore(activity: Activity): number {
   return 4;
 }
 
-function getGreeting(userName: string, activities: Activity[]): GreetingContext {
-  const now = new Date();
+function getGreeting(userName: string, activities: Activity[]): GreetingContext {  const now = new Date();
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
 
@@ -495,11 +488,6 @@ export default function HomeScreen() {
               </Text>
             </View>
 
-            <Image
-              source={welcomeImages[greeting.image]}
-              style={styles.welcomeImage}
-              resizeMode="contain"
-            />
           </View>
 
           <Pressable

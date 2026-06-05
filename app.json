@@ -22,13 +22,14 @@
         "barStyle": "dark-content"
       },
       "permissions": [
-        "NOTIFICATIONS",
-        "RECEIVE_BOOT_COMPLETED",
-        "SCHEDULE_EXACT_ALARM",
-        "USE_EXACT_ALARM",
-        "VIBRATE",
-        "WAKE_LOCK"
-      ],
+          "RECORD_AUDIO",
+          "NOTIFICATIONS",
+          "RECEIVE_BOOT_COMPLETED",
+          "SCHEDULE_EXACT_ALARM",
+          "USE_EXACT_ALARM",
+          "VIBRATE",
+          "WAKE_LOCK"
+        ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -44,6 +45,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "expo-speech-recognition",
       "expo-router",
       "expo-dev-client",
       [
@@ -76,7 +78,8 @@
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-speech-recognition"
     ],
     "experiments": {
       "typedRoutes": true,

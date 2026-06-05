@@ -54,7 +54,7 @@ export default function OnboardingScreen({
   primaryIcon,
 }: Props) {
   const handleSkip = useCallback(() => {
-    router.replace("/home");
+    router.replace("/homeKai");
   }, []);
 
   const renderedTitle = useMemo(() => {

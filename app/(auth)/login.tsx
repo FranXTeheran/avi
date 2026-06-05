@@ -60,7 +60,7 @@ export default function LoginScreen() {
       await signIn(normalizedEmail, normalizedPassword);
       registerPushToken().catch(console.warn)
 
-      router.replace("/home");
+      router.replace("/homeKai");
     } catch (error: any) {
       Alert.alert(
         "Error",

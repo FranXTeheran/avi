@@ -71,7 +71,7 @@ export default function CalendarImportScreen() {
   }
 
   function handleSkip() {
-    router.replace("/home");
+    router.replace("/homeKai");
   }
 
   return (
