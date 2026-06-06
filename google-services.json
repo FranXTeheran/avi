@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "978544232476",
+    "project_id": "kaiapp-5a2a6",
+    "storage_bucket": "kaiapp-5a2a6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:978544232476:android:c566423007e5b2509677d9",
+        "android_client_info": {
+          "package_name": "com.franx_dev.kai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFphPrq-YvFm7mShWxzMdaTSueIcrvVhI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

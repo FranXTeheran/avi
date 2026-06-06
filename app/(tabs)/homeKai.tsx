@@ -6,6 +6,8 @@ import {
 	useState,
 	useEffect,
 } from "react";
+import LottieView from "lottie-react-native";
+
 
 import { typography } from "@/src/constants/typography";
 import {
@@ -796,11 +798,12 @@ const handleQuickWeek = useCallback(async () => {
 				>
                     <View style={styles.header}>
                     <View style={styles.heroImageGlow}>
-                        <Image
-                        source={require("../../assets/images/home-kai.png")}
-                        style={styles.heroImage}
-                        resizeMode="contain"
-                        />
+						<LottieView
+							source={require("../../assets/animations/kaiAnimated.json")}
+							autoPlay
+							loop
+							style={styles.heroImage}
+						/>
                     </View>
 
                     <Text style={[styles.heroTitle, { color: colors.text }]}>
@@ -1134,8 +1137,8 @@ const styles = StyleSheet.create({
 	},
 
 	heroImageGlow: {
-		width: 176,
-		height: 126,
+		width: 300,
+		height: 200,
 		borderRadius: 44,
 		alignItems: "center",
 		justifyContent: "center",
@@ -1144,8 +1147,8 @@ const styles = StyleSheet.create({
 	},
 
 	heroImage: {
-		width: 210,
-		height: 150,
+		width: 300,
+		height: 300,
 	},
 
 	heroTitle: {

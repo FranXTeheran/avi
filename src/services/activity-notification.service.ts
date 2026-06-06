@@ -159,7 +159,7 @@ async function scheduleDailySummaryNotification(
 
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "AVI · Tienes varias entregas cerca ✨",
+      title: "Kai · Tienes varias entregas cerca ✨",
       body: "Hay varias actividades importantes ese día. Vamos una por una, sin saturarte.",
       sound: getContentSound(preferences),
       data: {
@@ -200,41 +200,41 @@ function getNotificationCopy(
 
   if (reminderType === "seven_days_before") {
     return {
-      title: `AVI · Tu ${label} vence en una semana ✨`,
+      title: `Kai · Tu ${label} vence en una semana ✨`,
       body: `${title}${subject}. Todavía tienes margen. Buen momento para empezar con calma.`,
     };
   }
 
   if (reminderType === "three_days_before") {
     return {
-      title: `AVI · Se acerca tu ${label} ✨`,
+      title: `Kai · Se acerca tu ${label} ✨`,
       body: `${title}${subject} vence en 3 días. Te aviso con tiempo para que puedas organizarte.`,
     };
   }
 
   if (reminderType === "two_days_before") {
     return {
-      title: `AVI · Tu ${label} vence pasado mañana`,
+      title: `Kai · Tu ${label} vence pasado mañana`,
       body: `${title}${subject}. Todavía tienes margen. Una cosa a la vez.`,
     };
   }
 
   if (reminderType === "one_day_before") {
     return {
-      title: `AVI · Mañana vence tu ${label} ✨`,
+      title: `Kai · Mañana vence tu ${label} ✨`,
       body: `${title}${subject}. Buen momento para dejarlo listo hoy.`,
     };
   }
 
   if (reminderType === "same_day") {
     return {
-      title: `AVI · Hoy vence tu ${label}`,
+      title: `Kai · Hoy vence tu ${label}`,
       body: `${title}${subject}. Puedes revisarlo cuando tengas un momento. Puedes con esto.`,
     };
   }
 
   return {
-    title: "AVI · Solo un recordatorio suave",
+    title: "Kai · Solo un recordatorio suave",
     body: `${title}${subject}. Vence hoy. Todavía tienes tiempo. Puedes con esto ✨`,
   };
 }
@@ -274,8 +274,8 @@ async function configureAndroidChannel() {
   if (Platform.OS !== "android") return;
 
   await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-    name: "AVI recordatorios",
-    description: "Recordatorios académicos suaves de AVI.",
+    name: "Kai recordatorios",
+    description: "Recordatorios académicos suaves de Kai.",
     importance: Notifications.AndroidImportance.HIGH,
     sound: "avi_soft.wav",
     vibrationPattern: [0, 120, 80, 120],
@@ -303,8 +303,8 @@ export async function sendTestNotification(): Promise<void> {
 
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "AVI · Prueba de recordatorio ✨",
-      body: "Así se sentirá AVI cuando te acompañe con tus entregas. Una cosa a la vez.",
+      title: "Kai · Prueba de recordatorio ✨",
+      body: "Así se sentirá Kai cuando te acompañe con tus entregas. Una cosa a la vez.",
       sound: getContentSound(preferences),
       data: { test: true, source: "avi" },
     },
@@ -358,7 +358,7 @@ export async function scheduleWeeklyCalmNotification(): Promise<void> {
 
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "AVI · Tu semana se ve manejable ✨",
+      title: "Kai · Tu semana se ve manejable ✨",
       body: "No tienes entregas urgentes por ahora. Puedes organizarte con calma.",
       sound: getContentSound(preferences),
       data: { type: WEEKLY_CALM_ID, source: "avi" },
@@ -404,10 +404,11 @@ export async function cancelActivityNotifications(activityId: string) {
   }
 }
 
-export async function scheduleActivityNotifications(
-  activity: ActivityForNotification
-) {
-  const preferences = await getNotificationPreferences();
+  export async function scheduleActivityNotifications(
+    activity: ActivityForNotification,
+    preloadedPreferences?: NotificationPreferences
+  ) {
+    const preferences = preloadedPreferences ?? await getNotificationPreferences();
 
   if (!preferences.enabled) {
     await cancelActivityNotifications(activity.id);
@@ -555,8 +556,8 @@ export async function rescheduleActivityNotifications(
   for (let i = 0; i < toReschedule.length; i += BATCH_SIZE) {
     const batch = toReschedule.slice(i, i + BATCH_SIZE);
     await Promise.all(
-      batch.map((activity) => scheduleActivityNotifications(activity))
-    );
+      batch.map((activity) => scheduleActivityNotifications(activity, preferences))
+    );;
   }
 
   if (hasUrgentActivities(activities)) {

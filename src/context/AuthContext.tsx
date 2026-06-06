@@ -9,6 +9,7 @@ import {
 
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "@/src/lib/supabase";
+import { registerPushToken } from "../services/push-token.service";
 
 type AuthContextType = {
   session: Session | null;
@@ -38,6 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (_event, nextSession) => {
         setSession(nextSession);
         setLoading(false);
+
+        if (nextSession?.user) {
+          registerPushToken().catch(console.warn);
+        }
       }
     );
 

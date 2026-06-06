@@ -133,11 +133,9 @@ export default function NotificationSettingsScreen() {
           return;
         }
 
-        const activities = await getActivities();
+        const activities = await getActivities({ forceRefresh: true });
 
-        rescheduleActivityNotifications(activities, true).catch((error) => {
-          console.warn("Error rescheduling notifications:", error);
-        });
+        await rescheduleActivityNotifications(activities, true);
       } catch {
         setPreferences(previousPreferences);
 
@@ -311,7 +309,7 @@ export default function NotificationSettingsScreen() {
   const soundOptions = useMemo(
     () => [
       {
-        title: "AVI suave",
+        title: "Kai suave",
         subtitle: "Tu sonido personalizado.",
         value: "avi_soft.wav" as NotificationSound,
       },
@@ -403,7 +401,7 @@ export default function NotificationSettingsScreen() {
             </Text>
 
             <Text style={[styles.subtitle, { color: colors.muted }]}>
-              Ajusta cómo quieres que AVI te acompañe, sin ruido ni ansiedad.
+              Ajusta cómo quieres que Kai te acompañe, sin ruido ni ansiedad.
             </Text>
           </View>
         </View>
@@ -457,7 +455,7 @@ export default function NotificationSettingsScreen() {
           </Text>
 
           <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
-            Elige cuándo quieres que AVI te recuerde tus pendientes.
+            Elige cuándo quieres que Kai te recuerde tus pendientes.
           </Text>
         </View>
 
@@ -568,7 +566,7 @@ export default function NotificationSettingsScreen() {
               </Text>
 
               <Text style={[styles.mainSubtitle, { color: colors.muted }]}>
-                AVI te ayuda a cerrar la semana con calma.
+                Kai te ayuda a cerrar la semana con calma.
               </Text>
             </View>
 
@@ -595,7 +593,7 @@ export default function NotificationSettingsScreen() {
           </Text>
 
           <Text style={[styles.sectionSubtitle, { color: colors.muted }]}>
-            AVI usará tu sonido suave personalizado.
+            Kai usará tu sonido suave personalizado.
           </Text>
         </View>
 
