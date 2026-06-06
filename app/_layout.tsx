@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { Platform, StatusBar as NativeStatusBar } from "react-native";
+import { useFonts } from "expo-font";
 
 import { Stack, router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -111,13 +112,26 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
-  return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <RootNavigator />
-        </AuthProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
-  );
+  const [fontsLoaded] = useFonts({
+    MertaSansRegular: require("../assets/fonts/MertaSansDemo-Regular-BF69f4d6568f537.ttf"),
+    MertaSansMedium: require("../assets/fonts/MertaSansDemo-Medium-BF69f4d657c03e7.ttf"),
+    MertaSansSemiBold: require("../assets/fonts/MertaSansDemo-SemiBold-BF69f4d6568e850.ttf"),
+    MertaSansBold: require("../assets/fonts/MertaSansDemo-Bold-BF69f4d657c213d.ttf"),
+    MertaSansExtraBold: require("../assets/fonts/MertaSansDemo-ExtraBold-BF69f4d6568eef7.ttf"),
+    MertaSansBlack: require("../assets/fonts/MertaSansDemo-Black-BF69f4d657c03e3.ttf"),
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
+	return (
+		<SafeAreaProvider>
+			<ThemeProvider>
+				<AuthProvider>
+					<RootNavigator />
+				</AuthProvider>
+			</ThemeProvider>
+		</SafeAreaProvider>
+	);
 }

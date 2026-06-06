@@ -1,3 +1,4 @@
+import { useFonts } from "expo-font";
 import { useMemo } from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
