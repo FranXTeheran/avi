@@ -136,9 +136,6 @@ export default function ProfileScreen() {
           <View>
             <Text style={[styles.logo, { color: colors.primary }]}>PERFIL</Text>
 
-            <Text style={[styles.title, { color: colors.text }]}>
-              Tu espacio en AVI
-            </Text>
 
             <Text style={[styles.subtitle, { color: colors.muted }]}>
               Administra tu cuenta y preferencias académicas.

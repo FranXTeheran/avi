@@ -137,6 +137,8 @@ function getPriorityTone(priority: string | null, colors: Colors) {
 	};
 }
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 const KaiQuickCard = ({
 	title,
 	icon,
@@ -149,50 +151,91 @@ const KaiQuickCard = ({
 	onPress: () => void;
 	colors: Colors;
 	active?: boolean;
-}) => (
-	<Pressable
-		onPress={onPress}
-		style={[
-			styles.kaiQuickCard,
-			styles.softShadow,
-			{
-				backgroundColor: active ? colors.primary : colors.surface,
-				borderColor: active ? colors.primary : colors.border,
-			},
-		]}
-	>
-		<View
+}) => {
+	const scaleAnim = useRef(new Animated.Value(1)).current;
+	const opacityAnim = useRef(new Animated.Value(1)).current;
+
+	const handlePressIn = () => {
+		Animated.parallel([
+			Animated.timing(scaleAnim, {
+				toValue: 0.97,
+				duration: 120,
+				useNativeDriver: true,
+			}),
+			Animated.timing(opacityAnim, {
+				toValue: 0.9,
+				duration: 120,
+				useNativeDriver: true,
+			}),
+		]).start();
+	};
+
+	const handlePressOut = () => {
+		Animated.parallel([
+			Animated.timing(scaleAnim, {
+				toValue: 1,
+				duration: 220,
+				useNativeDriver: true,
+			}),
+			Animated.timing(opacityAnim, {
+				toValue: 1,
+				duration: 220,
+				useNativeDriver: true,
+			}),
+		]).start();
+	};
+
+	return (
+		<AnimatedPressable
+			onPress={onPress}
+			onPressIn={handlePressIn}
+			onPressOut={handlePressOut}
 			style={[
-				styles.kaiQuickIcon,
+				styles.kaiQuickCard,
+				styles.softShadow,
 				{
-					backgroundColor: active
-						? "rgba(255,255,255,0.18)"
-						: colors.primarySoft,
+					backgroundColor: active ? colors.primary : colors.surface,
+					borderColor: active ? colors.primary : colors.border,
+					opacity: opacityAnim,
+					transform: [
+						{
+							scale: scaleAnim,
+						},
+					],
 				},
 			]}
 		>
-			<Ionicons
-				name={icon}
-				size={22}
-				color={active ? "#FFFFFF" : colors.primary}
-			/>
-		</View>
+			<View
+				style={[
+					styles.kaiQuickIcon,
+					{
+						backgroundColor: active
+							? "rgba(255,255,255,0.18)"
+							: colors.primarySoft,
+					},
+				]}
+			>
+				<Ionicons
+					name={icon}
+					size={22}
+					color={active ? "#FFFFFF" : colors.primary}
+				/>
+			</View>
 
-		<Text
-			style={[
-				styles.kaiQuickTitle,
-				{
-					color: active ? "#FFFFFF" : colors.text,
-				},
-			]}
-			numberOfLines={2}
-		>
-			{title}
-		</Text>
-
-
-	</Pressable>
-);
+			<Text
+				style={[
+					styles.kaiQuickTitle,
+					{
+						color: active ? "#FFFFFF" : colors.text,
+					},
+				]}
+				numberOfLines={2}
+			>
+				{title}
+			</Text>
+		</AnimatedPressable>
+	);
+};
 
 const UrgentCard = memo(function UrgentCard({
 	activity,
@@ -478,6 +521,8 @@ export default function HomeScreen() {
 
 	const profileLoadedRef = useRef(false);
 	const fadeAnim = useRef(new Animated.Value(0)).current;
+	const [showKaiBubble, setShowKaiBubble] = useState(false);
+	const bubbleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const loadHomeData = useCallback(async () => {
 		try {
@@ -513,27 +558,38 @@ export default function HomeScreen() {
 		}, [loadHomeData])
 	);
 
-	useEffect(() => {
-		if (!kai.response.text) return;
+useEffect(() => {
+	if (!kai.response.text) return;
 
-		fadeAnim.setValue(0);
+	if (bubbleTimerRef.current) {
+		clearTimeout(bubbleTimerRef.current);
+	}
 
-		Animated.sequence([
-			Animated.timing(fadeAnim, {
-				toValue: 1,
-				duration: 300,
-				useNativeDriver: true,
-			}),
-			Animated.delay(3500),
-			Animated.timing(fadeAnim, {
-				toValue: 0,
-				duration: 250,
-				useNativeDriver: true,
-			}),
-		]).start(() => {
+	setShowKaiBubble(true);
+
+	Animated.timing(fadeAnim, {
+		toValue: 1,
+		duration: 450,
+		useNativeDriver: true,
+	}).start();
+
+	bubbleTimerRef.current = setTimeout(() => {
+		Animated.timing(fadeAnim, {
+			toValue: 0,
+			duration: 700,
+			useNativeDriver: true,
+		}).start(() => {
+			setShowKaiBubble(false);
 			kai.clearResponse();
 		});
-	}, [kai.response.text, fadeAnim, kai]);
+	}, 5200);
+
+	return () => {
+		if (bubbleTimerRef.current) {
+			clearTimeout(bubbleTimerRef.current);
+		}
+	};
+}, [kai.response.text]);
 
 	const now = useMemo(() => new Date(), []);
 
@@ -590,28 +646,40 @@ export default function HomeScreen() {
 	}, []);
 
 	const handleQuickToday = useCallback(async () => {
-		setActiveQuery("today");
-		await kai.handleToday();
-		setTimeout(() => setActiveQuery(null), 300);
-	}, [kai]);
+	setActiveQuery("today");
+	await kai.handleToday();
 
-	const handleQuickTomorrow = useCallback(async () => {
-		setActiveQuery("tomorrow");
-		await kai.handleTomorrow();
-		setTimeout(() => setActiveQuery(null), 300);
-	}, [kai]);
+	setTimeout(() => {
+		setActiveQuery(null);
+	}, 1000);
+}, [kai]);
 
-	const handleQuickNext = useCallback(async () => {
-		setActiveQuery("next");
-		await kai.handleNext();
-		setTimeout(() => setActiveQuery(null), 300);
-	}, [kai]);
+const handleQuickTomorrow = useCallback(async () => {
+	setActiveQuery("tomorrow");
+	await kai.handleTomorrow();
 
-	const handleQuickWeek = useCallback(async () => {
-		setActiveQuery("week");
-		await kai.handleWeek();
-		setTimeout(() => setActiveQuery(null), 300);
-	}, [kai]);
+	setTimeout(() => {
+		setActiveQuery(null);
+	}, 1000);
+}, [kai]);
+
+const handleQuickNext = useCallback(async () => {
+	setActiveQuery("next");
+	await kai.handleNext();
+
+	setTimeout(() => {
+		setActiveQuery(null);
+	}, 1000);
+}, [kai]);
+
+const handleQuickWeek = useCallback(async () => {
+	setActiveQuery("week");
+	await kai.handleWeek();
+
+	setTimeout(() => {
+		setActiveQuery(null);
+	}, 1000);
+}, [kai]);
 
 	if (loading) {
 		return (
@@ -671,7 +739,7 @@ export default function HomeScreen() {
 			]}
 			edges={["top"]}
 		>
-			{kai.response.text ? (
+			{showKaiBubble && kai.response.text ?  (
 				<Animated.View
 					pointerEvents="none"
 					style={[
@@ -693,7 +761,7 @@ export default function HomeScreen() {
 					]}
 				>
 					<Image
-						source={require("../../assets/images/home-kai.png")}
+						source={require("../../assets/images/icon-avatar.png")}
 						style={styles.kaiBubbleAvatar}
 					/>
 

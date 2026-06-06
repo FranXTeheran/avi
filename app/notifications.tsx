@@ -397,7 +397,6 @@ export default function NotificationSettingsScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerTextBox}>
-            <Text style={[styles.logo, { color: colors.primary }]}>AVI</Text>
 
             <Text style={[styles.title, { color: colors.text }]}>
               Recordatorios

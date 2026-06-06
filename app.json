@@ -1,17 +1,19 @@
 {
   "expo": {
-    "name": "avi",
+    "name": "Kai",
     "slug": "avi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "avi",
+    "scheme": "kai",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSUserNotificationsUsageDescription": "AVI usa recordatorios suaves para ayudarte a organizar tus entregas y evaluaciones sin generar ansiedad."
+        "NSUserNotificationsUsageDescription": "Kai usa recordatorios suaves para ayudarte a organizar tus entregas y evaluaciones sin generar ansiedad.",
+        "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition.",
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use the microphone."
       }
     },
     "android": {
@@ -28,7 +30,8 @@
         "SCHEDULE_EXACT_ALARM",
         "USE_EXACT_ALARM",
         "VIBRATE",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "android.permission.RECORD_AUDIO"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -38,7 +41,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.franx_dev.avi"
+      "package": "com.franx_dev.kai"
     },
     "web": {
       "output": "static",
@@ -90,6 +93,7 @@
       "eas": {
         "projectId": "dbd24a43-d12e-473e-a2a6-b3dd5c9fa97d"
       }
-    }
+    },
+    "owner": "franx_dev"
   }
 }
