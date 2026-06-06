@@ -5,7 +5,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SECRET_KEYS")!
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
 async function sendExpoPushNotification(
