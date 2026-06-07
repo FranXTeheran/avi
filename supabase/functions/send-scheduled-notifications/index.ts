@@ -1,6 +1,3 @@
-// @ts-ignore
-/// <reference types="https://deno.land/x/types/index.d.ts" />
-// deno-lint-ignore no-explicit-any
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const supabase = createClient(
@@ -13,7 +10,9 @@ async function sendExpoPushNotification(
   title: string,
   body: string,
   data: Record<string, unknown>
-) {
+) 
+
+{
   const response = await fetch("https://exp.host/--/api/v2/push/send", {
     method: "POST",
     headers: {
@@ -29,7 +28,6 @@ async function sendExpoPushNotification(
       priority: "high",
     }),
   });
-
   return response.json();
 }
 
@@ -37,6 +35,9 @@ Deno.serve(async () => {
   try {
     const now = new Date();
     const windowEnd = new Date(now.getTime() + 60 * 1000);
+    const windowStart = new Date(now.getTime() - 60 * 1000);
+
+    console.log("Running at:", now.toISOString());
 
     const { data: notifications, error } = await supabase
       .from("activity_notifications")
@@ -54,24 +55,27 @@ Deno.serve(async () => {
       `)
       .eq("sent", false)
       .lte("scheduled_for", windowEnd.toISOString())
-      .gte("scheduled_for", new Date(now.getTime() - 60 * 1000).toISOString());
+      .gte("scheduled_for", windowStart.toISOString());
 
     if (error) throw error;
+
+    console.log("Found:", notifications?.length ?? 0);
 
     if (!notifications || notifications.length === 0) {
       return new Response(JSON.stringify({ sent: 0 }), { status: 200 });
     }
 
-  const userIds = [...new Set(notifications.map((n: { user_id: string }) => n.user_id))];
+    const userIds = [...new Set(notifications.map((n: { user_id: string }) => n.user_id))];
 
     const { data: tokens } = await supabase
       .from("push_tokens")
       .select("user_id, token")
       .in("user_id", userIds);
 
-      const tokenMap = new Map<string, string>(
-        tokens?.map((t: { user_id: string; token: string }) => [t.user_id, t.token]) ?? []
-      );
+    const tokenMap = new Map<string, string>(
+      tokens?.map((t: { user_id: string; token: string }) => [t.user_id, t.token]) ?? []
+    );
+
     let sent = 0;
 
     for (const notification of notifications) {
@@ -86,11 +90,15 @@ Deno.serve(async () => {
         notification.reminder_type
       );
 
-      await sendExpoPushNotification(token, title, body, {
+      console.log("Sending to:", token);
+
+      const expoResponse = await sendExpoPushNotification(token, title, body, {
         activityId: notification.activity_id,
         reminderType: notification.reminder_type,
         source: "avi",
       });
+
+      console.log("Expo response:", JSON.stringify(expoResponse));
 
       await supabase
         .from("activity_notifications")
@@ -103,6 +111,7 @@ Deno.serve(async () => {
     return new Response(JSON.stringify({ sent }), { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Error:", message);
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 });

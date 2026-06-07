@@ -517,6 +517,12 @@ export default function HomeScreen() {
 	const [activities, setActivities] = useState<Activity[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [userName, setUserName] = useState("compañero");
+	const greeting = useMemo(() => {
+	const hour = new Date().getHours();
+	if (hour >= 5 && hour < 12) return "Buenos días";
+	if (hour >= 12 && hour < 18) return "Buenas tardes";
+	return "Buenas noches";
+	}, []);
 	const [activeQuery, setActiveQuery] = useState<
 		"today" | "tomorrow" | "next" | "week" | null
 	>(null);
@@ -806,9 +812,9 @@ const handleQuickWeek = useCallback(async () => {
 						/>
                     </View>
 
-                    <Text style={[styles.heroTitle, { color: colors.text }]}>
-                        Hola, <Text style={{ color: colors.primary }}>{userName}</Text>
-                    </Text>
+					<Text style={[styles.heroTitle, { color: colors.text }]}>
+					{greeting},{"\n"}<Text style={{ color: colors.primary }}>{userName}</Text>
+					</Text>
                     <Text style={[styles.heroSubtitle, { color: colors.muted }]}>
                         Tienes {upcoming.length} actividades pendientes
                     </Text>

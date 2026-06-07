@@ -47,9 +47,7 @@ export default function CalendarImportScreen() {
 			router.replace("/processing_calendar");
 
 			if (hasPermission) {
-				rescheduleActivityNotifications(savedActivities).catch((error) => {
-					console.warn("Error rescheduling notifications:", error);
-				});
+			await rescheduleActivityNotifications(savedActivities, true);
 			}
 		} catch (error: any) {
 			Alert.alert(
